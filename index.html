@@ -28,12 +28,23 @@
     .tier-btn { background: rgba(255,255,255,0.1); border: 2px solid #fbc02d; color: white; padding: 12px 5px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: bold; transition: 0.2s; }
     .tier-btn.selected { background: #fbc02d; color: #111; }
 
+    /* Layout & Table */
     .casino-table { background: radial-gradient(circle, #124d26 0%, #082913 100%); border: 8px solid #3e2723; border-radius: 20px; padding: 15px; max-width: 900px; margin: 0 auto; box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 5px 20px rgba(0,0,0,0.7); }
     .table-layout { display: grid; grid-template-rows: auto auto auto; gap: 12px; position: relative; }
     .bot-hand { background: rgba(0,0,0,0.3); padding: 8px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); min-height: 110px; }
     .balance { font-size: 13px; font-weight: bold; color: #fbc02d; margin-top: 2px; }
 
     .action-banner { background: #fbc02d; color: #111; font-weight: bold; padding: 6px 14px; border-radius: 20px; display: inline-block; margin: 8px 0; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+
+    /* Centered Middle Section */
+    .middle-row { display: flex; justify-content: space-between; align-items: stretch; gap: 6px; }
+    .side-bot { width: 31%; }
+    .center-table { background: rgba(0,0,0,0.45); padding: 10px; border-radius: 10px; border: 1px solid #fbc02d; display: flex; justify-content: space-evenly; align-items: center; width: 36%; }
+    .center-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 50%; height: 100%; gap: 4px; }
+    
+    .pile-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; white-space: nowrap; }
+    .deck-count-label { font-size: 11px; font-weight: normal; color: white; min-height: 15px; }
+    .empty-label { line-height: 84px; color: #aaa; font-size: 11px; }
 
     /* Authentic Standard Playing Card Styling */
     .poker-card {
@@ -55,66 +66,61 @@
     }
     .poker-card.red { color: #d00000; }
 
-    /* Classic Casino Corner Typography */
     .poker-card .corner { position: absolute; font-weight: bold; line-height: 0.9; text-align: center; }
     .poker-card .corner.top-left { top: 3px; left: 4px; }
     .poker-card .corner.bottom-right { bottom: 3px; right: 4px; transform: rotate(180deg); }
     .poker-card .corner .rank { font-size: 13px; display: block; font-family: "Arial", sans-serif; font-weight: 900; letter-spacing: -1px; }
     .poker-card .corner .suit-mini { font-size: 10px; display: block; margin-top: -1px; }
 
-    /* Card Center Graphics */
     .poker-card .center-graphics { position: absolute; top: 16px; bottom: 16px; left: 10px; right: 10px; display: flex; justify-content: center; align-items: center; }
     .poker-card .center-graphics.single-pip { font-size: 32px; }
 
-    /* Standard Face Card Vector Court Art */
     .poker-card .face-card-art {
-      position: absolute;
-      top: 15px; bottom: 15px; left: 10px; right: 10px;
-      border: 1.5px solid currentColor;
-      border-radius: 3px;
-      background: rgba(0,0,0,0.02);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      align-items: center;
-      padding: 3px;
+      position: absolute; top: 15px; bottom: 15px; left: 10px; right: 10px;
+      border: 1.5px solid currentColor; border-radius: 3px; background: rgba(0,0,0,0.02);
+      display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 3px;
     }
     .poker-card .face-card-art .face-head { font-size: 22px; line-height: 1; }
     .poker-card .face-card-art .face-title { font-family: "Arial", sans-serif; font-size: 8px; font-weight: 900; letter-spacing: 1px; }
 
-    /* Authentic Bicycle Diamond Lattice Card Back */
     .poker-card.back {
       background-color: #b71c1c;
-      background-image: 
-        radial-gradient(#ffffff 15%, transparent 16%),
-        radial-gradient(#ffffff 15%, transparent 16%);
-      background-size: 6px 6px;
-      background-position: 0 0, 3px 3px;
+      background-image: radial-gradient(#ffffff 15%, transparent 16%), radial-gradient(#ffffff 15%, transparent 16%);
+      background-size: 6px 6px; background-position: 0 0, 3px 3px;
       border: 3px solid #ffffff !important;
       box-shadow: 1px 3px 8px rgba(0,0,0,0.7);
     }
 
     .flying-card { position: fixed; z-index: 999; pointer-events: none; transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1); }
-    .discard-container { position: relative; width: 80px; height: 90px; margin: 0 auto; }
-    .discard-container .poker-card { position: absolute; top: 0; left: 12px; }
+    .discard-container { position: relative; width: 58px; height: 84px; margin: 0 auto; }
+    .discard-container .poker-card { position: absolute; top: 0; left: 0; }
 
     .inspectable { cursor: pointer; border: 2px dashed #fbc02d; padding: 4px; border-radius: 8px; animation: pulse 1.5s infinite; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(251, 192, 45, 0.7); } 70% { box-shadow: 0 0 0 8px rgba(251, 192, 45, 0); } 100% { box-shadow: 0 0 0 0 rgba(251, 192, 45, 0); } }
 
-    button { padding: 8px 16px; font-size: 14px; font-weight: bold; margin: 3px; cursor: pointer; border-radius: 6px; border: none; background: #fbc02d; color: #111; }
+    button { padding: 8px 16px; font-size: 13px; font-weight: bold; margin: 3px; cursor: pointer; border-radius: 6px; border: none; background: #fbc02d; color: #111; }
     button:hover { background: #ffd54f; }
     button:disabled { opacity: 0.35; cursor: not-allowed; }
     .quit-btn { background: #e53935; color: white; margin-left: 8px; }
 
+    /* Mobile Refinements */
     @media (max-width: 600px) {
-      .poker-card { width: 42px; height: 62px; margin: 1px; }
+      .poker-card { width: 40px; height: 60px; margin: 1px; }
       .poker-card .corner .rank { font-size: 10px; }
       .poker-card .corner .suit-mini { font-size: 8px; }
       .poker-card .center-graphics.single-pip { font-size: 20px; }
-      .casino-table { padding: 8px; border-width: 4px; }
+      .casino-table { padding: 6px; border-width: 4px; }
       .splash-title { font-size: 28px; }
-      button { padding: 7px 12px; font-size: 12px; }
+      button { padding: 6px 10px; font-size: 11px; margin: 2px; }
       .tier-grid { grid-template-columns: repeat(2, 1fr); }
+      
+      /* Mobile Middle Row Specifics */
+      .pile-label { display: none; } /* Hide Text on Mobile */
+      .empty-label { display: none; } /* Hide Empty label */
+      .deck-count-label { font-size: 10px; }
+      .discard-container { width: 40px; height: 60px; }
+      .side-bot { width: 30%; }
+      .center-table { width: 38%; padding: 6px 4px; gap: 4px; }
     }
   </style>
 </head>
@@ -180,31 +186,36 @@
       </div>
 
       <!-- Middle Row -->
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div id="player-box-3" class="bot-hand" style="width: 30%;">
+      <div class="middle-row">
+        <!-- Left Bot -->
+        <div id="player-box-3" class="bot-hand side-bot">
           <h3 id="name-3" style="margin:1px; font-size:14px;">Player 4</h3>
           <div id="bal-3" class="balance">$10.00</div>
           <div id="hand-3"></div>
         </div>
 
-        <div style="background: rgba(0,0,0,0.45); padding: 10px; border-radius: 10px; border: 1px solid #fbc02d; display: flex; justify-content: space-around; width: 38%;">
-          <div id="deck-area" onclick="inspectCards('deck')">
-            <b style="font-size:12px;">Middle Deck</b><br>
-            <div id="deck-card" class="poker-card back" style="margin-top:2px;"></div>
-            <div style="font-size:11px;"><span id="deck-count" style="color: #fbc02d; font-weight:bold;">52</span> left</div>
-            <button id="drawBtn" onclick="event.stopPropagation(); drawCard();" disabled style="margin-top:2px; padding:4px 8px; font-size:11px;">Draw</button>
+        <!-- Center Table -->
+        <div class="center-table">
+          <div id="deck-area" class="center-col" onclick="inspectCards('deck')">
+            <div class="pile-label">Middle Deck</div>
+            <div id="deck-card" class="poker-card back"></div>
+            <div class="deck-count-label"><span id="deck-count" style="color: #fbc02d; font-weight:bold;">52</span> left</div>
+            <button id="drawBtn" onclick="event.stopPropagation(); drawCard();" disabled>Draw</button>
           </div>
 
-          <div id="discard-area" onclick="inspectCards('discard')">
-            <b style="font-size:12px;">Discard Pile</b><br>
+          <div id="discard-area" class="center-col" onclick="inspectCards('discard')">
+            <div class="pile-label">Discard Pile</div>
             <div class="discard-container" id="discard">
-              <span style="line-height:60px; color:#aaa; font-size:11px;">Empty</span>
+              <span class="empty-label">Empty</span>
             </div>
-            <button id="takeBtn" onclick="event.stopPropagation(); takeDiscard();" disabled style="margin-top:2px; padding:4px 8px; font-size:11px;">Take</button>
+            <!-- Invisible Spacer to perfectly align Draw and Take buttons horizontally -->
+            <div class="deck-count-label">&nbsp;</div> 
+            <button id="takeBtn" onclick="event.stopPropagation(); takeDiscard();" disabled>Take</button>
           </div>
         </div>
 
-        <div id="player-box-1" class="bot-hand" style="width: 30%;">
+        <!-- Right Bot -->
+        <div id="player-box-1" class="bot-hand side-bot">
           <h3 id="name-1" style="margin:1px; font-size:14px;">Player 2</h3>
           <div id="bal-1" class="balance">$10.00</div>
           <div id="hand-1"></div>
@@ -448,7 +459,7 @@
           discDiv.innerHTML += renderPokerCard(c, false, 0, c.rotation || 0);
         });
       } else {
-        discDiv.innerHTML = '<span style="line-height:60px; color:#aaa; font-size:11px;">Empty</span>';
+        discDiv.innerHTML = '<span class="empty-label">Empty</span>';
       }
     });
   </script>
