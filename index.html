@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Kua Merah</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0b3318; color: white; text-align: center; margin: 0; padding: 15px; overflow-x: hidden; }
+    
+    /* Modals */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+    .modal-box { background: #144222; border: 3px solid #fbc02d; padding: 30px; border-radius: 12px; max-width: 600px; max-height: 80vh; overflow-y: auto; box-shadow: 0 0 25px rgba(0,0,0,0.9); }
+    .modal-box h2 { color: #fbc02d; margin-top: 0; }
+
+    /* Layout */
+    .table-layout { display: grid; grid-template-rows: auto auto auto; gap: 15px; max-width: 900px; margin: 0 auto; position: relative; }
+    .bot-hand { background: rgba(0,0,0,0.35); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); min-height: 110px; }
+    .balance { font-size: 14px; font-weight: bold; color: #fbc02d; margin-top: 3px; }
+
+    /* Action Banner */
+    .action-banner { background: #fbc02d; color: #111; font-weight: bold; padding: 8px 15px; border-radius: 20px; display: inline-block; margin: 10px 0; font-size: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+
+    /* Cards */
+    .poker-card {
+      display: inline-block;
+      width: 55px;
+      height: 82px;
+      background: white;
+      color: #111;
+      border-radius: 6px;
+      margin: 3px;
+      position: relative;
+      font-weight: bold;
+      box-shadow: 1px 2px 6px rgba(0,0,0,0.5);
+      user-select: none;
+      vertical-align: middle;
+      border: 1px solid #ccc;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .poker-card.red { color: #d32f2f; }
+    .poker-card .rank-top { position: absolute; top: 3px; left: 5px; font-size: 13px; line-height: 12px; text-align: left; }
+    .poker-card .rank-top span { display: block; font-size: 11px; }
+    .poker-card .center-suit { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 26px; }
+    
+    .poker-card.back {
+      background-color: #b71c1c;
+      background-image: 
+        radial-gradient(white 15%, transparent 16%),
+        radial-gradient(white 15%, transparent 16%);
+      background-size: 8px 8px;
+      background-position: 0 0, 4px 4px;
+      border: 3px solid white;
+      box-sizing: border-box;
+    }
+
+    .flying-card {
+      position: fixed;
+      z-index: 999;
+      pointer-events: none;
+      transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+
+    .discard-container { position: relative; width: 100px; height: 100px; margin: 0 auto; }
+    .discard-container .poker-card { position: absolute; top: 0; left: 20px; }
+
+    .inspectable { cursor: pointer; border: 2px dashed #fbc02d; padding: 5px; border-radius: 8px; animation: pulse 1.5s infinite; }
+    .inspectable:hover { background: rgba(251, 192, 45, 0.2); }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(251, 192, 45, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(251, 192, 45, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(251, 192, 45, 0); }
+    }
+
+    button { padding: 10px 22px; font-size: 15px; font-weight: bold; margin: 4px; cursor: pointer; border-radius: 6px; border: none; background: #fbc02d; color: #111; }
+    button:hover { background: #ffd54f; }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    
+    .quit-btn { background: #e53935; color: white; margin-left: 10px; }
+    .quit-btn:hover { background: #ef5350; }
+  </style>
+</head>
+<body>
+
+  <!-- Entry Modal -->
+  <div id="startModal" class="modal-overlay">
+    <div class="modal-box">
+      <h2>Welcome to Kua Merah</h2>
+      <p>Entry Buy-In: <b>$10.00</b> per player</p>
+      <p>Tip: After a game ends, click on the Middle Deck or Discard Pile to inspect all unplayed cards!</p>
+      <button onclick="enterGame()">Pay $10 & Join Room</button>
+    </div>
+  </div>
+
+  <!-- Post-Game Deck/Discard Inspector Modal -->
+  <div id="inspectModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <h2 id="inspectTitle">Inspecting Cards</h2>
+      <div id="inspectGrid" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 15px 0;"></div>
+      <button onclick="closeInspectModal()">Close Inspector</button>
+    </div>
+  </div>
+
+  <h1 style="margin: 5px 0;">Kua Merah</h1>
+  <div>
+    <button id="nextRoundBtn" onclick="startGame()" style="display:none;">Start Next Round</button>
+    <button id="quitBtn" onclick="quitGame()" class="quit-btn" style="display:none;">Quit & Reset Room</button>
+  </div>
+  
+  <div><span id="actionLog" class="action-banner">Join the room to begin.</span></div>
+  <h2 id="status" style="margin: 5px 0; font-size: 20px;">Ready</h2>
+
+  <div class="table-layout">
+    <!-- Top Bot -->
+    <div id="player-box-2" class="bot-hand">
+      <h3 id="name-2" style="margin:2px;">Player 3</h3>
+      <div id="bal-2" class="balance">$10.00</div>
+      <div id="hand-2"></div>
+    </div>
+
+    <!-- Middle Row -->
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <!-- Left Bot -->
+      <div id="player-box-3" class="bot-hand" style="width: 230px;">
+        <h3 id="name-3" style="margin:2px;">Player 4</h3>
+        <div id="bal-3" class="balance">$10.00</div>
+        <div id="hand-3"></div>
+      </div>
+
+      <!-- Center Table -->
+      <div style="background: rgba(0,0,0,0.45); padding: 15px; border-radius: 10px; min-width: 240px; border: 1px solid #fbc02d; display: flex; justify-content: space-around;">
+        
+        <!-- Middle Deck -->
+        <div id="deck-area" onclick="inspectCards('deck')">
+          <b>Middle Deck</b><br>
+          <div id="deck-card" class="poker-card back" style="margin-top:5px;"></div>
+          <div><span id="deck-count" style="font-size: 16px; color: #fbc02d; font-weight:bold;">52</span> left</div>
+          <button id="drawBtn" onclick="event.stopPropagation(); drawCard();" disabled style="margin-top:5px; padding:6px 12px; font-size:13px;">Draw Deck</button>
+        </div>
+
+        <!-- Discard Pile -->
+        <div id="discard-area" onclick="inspectCards('discard')">
+          <b>Discard Pile</b><br>
+          <div class="discard-container" id="discard">
+            <span style="line-height:100px; color:#aaa;">Empty</span>
+          </div>
+          <button id="takeBtn" onclick="event.stopPropagation(); takeDiscard();" disabled style="margin-top:5px; padding:6px 12px; font-size:13px;">Take Discard</button>
+        </div>
+
+      </div>
+
+      <!-- Right Bot -->
+      <div id="player-box-1" class="bot-hand" style="width: 230px;">
+        <h3 id="name-1" style="margin:2px;">Player 2</h3>
+        <div id="bal-1" class="balance">$10.00</div>
+        <div id="hand-1"></div>
+      </div>
+    </div>
+
+    <!-- Human Player -->
+    <div id="player-box-0" style="background: rgba(255,255,255,0.08); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2);">
+      <h3 id="name-0" style="margin:2px;">You (Player 1)</h3>
+      <div id="bal-0" class="balance">$10.00</div>
+      <div id="hand-0"></div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let currentGameState = null;
+
+    function playCardSound() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const bufferSize = ctx.sampleRate * 0.04;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 900;
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.6, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.04);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+
+        noise.start();
+      } catch(e) {}
+    }
+
+    function triggerCardAnimation(source, targetPlayerIdx) {
+      let srcEl = source === 'deck' ? document.getElementById('deck-area') : document.getElementById('discard-area');
+      let targetEl = document.getElementById(`player-box-${targetPlayerIdx}`);
+      if (!srcEl || !targetEl) return;
+
+      let srcRect = srcEl.getBoundingClientRect();
+      let targetRect = targetEl.getBoundingClientRect();
+
+      let flyingCard = document.createElement('div');
+      flyingCard.className = 'poker-card back flying-card';
+      flyingCard.style.left = `${srcRect.left + 10}px`;
+      flyingCard.style.top = `${srcRect.top + 10}px`;
+
+      document.body.appendChild(flyingCard);
+
+      setTimeout(() => {
+        flyingCard.style.left = `${targetRect.left + targetRect.width / 2 - 25}px`;
+        flyingCard.style.top = `${targetRect.top + targetRect.height / 2 - 40}px`;
+        flyingCard.style.opacity = '0.3';
+      }, 20);
+
+      setTimeout(() => flyingCard.remove(), 650);
+    }
+
+    function inspectCards(type) {
+      if (!currentGameState || !currentGameState.gameEnded) return; // Only inspect after round finishes
+
+      let modal = document.getElementById('inspectModal');
+      let title = document.getElementById('inspectTitle');
+      let grid = document.getElementById('inspectGrid');
+      grid.innerHTML = '';
+
+      let cardList = (type === 'deck') ? currentGameState.deck : currentGameState.discardPile;
+      title.innerText = (type === 'deck') ? `Remaining Middle Deck Cards (${cardList.length})` : `Full Discard Pile (${cardList.length})`;
+
+      if (cardList.length === 0) {
+        grid.innerHTML = '<p style="color:#aaa;">No cards in this pile.</p>';
+      } else {
+        cardList.forEach((c, idx) => {
+          setTimeout(() => {
+            grid.innerHTML += renderPokerCard(c);
+            playCardSound();
+          }, idx * 40); // Staggered animated reveal
+        });
+      }
+
+      modal.style.display = 'flex';
+    }
+
+    function closeInspectModal() {
+      document.getElementById('inspectModal').style.display = 'none';
+    }
+
+    function enterGame() {
+      document.getElementById('startModal').style.display = 'none';
+      document.getElementById('nextRoundBtn').style.display = 'inline-block';
+      document.getElementById('quitBtn').style.display = 'inline-block';
+      startGame();
+    }
+
+    function quitGame() {
+      socket.emit('resetRoom');
+      document.getElementById('startModal').style.display = 'flex';
+      document.getElementById('nextRoundBtn').style.display = 'none';
+      document.getElementById('quitBtn').style.display = 'none';
+    }
+
+    function startGame() { socket.emit('startGame'); }
+    function drawCard() { socket.emit('playerDraw'); }
+    function takeDiscard() { socket.emit('playerTakeDiscard'); }
+    function discard(idx) { socket.emit('discardCard', idx); }
+
+    function renderPokerCard(card, isClickable = false, index = 0, customRotation = 0) {
+      let colorClass = card.isRed ? 'poker-card red' : 'poker-card';
+      let clickAttr = isClickable ? `onclick="discard(${index})"` : '';
+      let rotStyle = customRotation !== 0 ? `transform: rotate(${customRotation}deg);` : '';
+      return `
+        <div class="${colorClass}" ${clickAttr} style="${rotStyle} ${isClickable ? 'cursor:pointer; transform: translateY(-4px); border: 2px solid #fbc02d;' : ''}">
+          <div class="rank-top">${card.value}<span>${card.suit}</span></div>
+          <div class="center-suit">${card.suit}</div>
+        </div>
+      `;
+    }
+
+    socket.on('cardSound', () => playCardSound());
+    socket.on('animateCard', (data) => triggerCardAnimation(data.source, data.targetPlayer));
+
+    socket.on('stateUpdate', (state) => {
+      currentGameState = state;
+      document.getElementById('status').innerText = state.status;
+      document.getElementById('actionLog').innerText = state.actionLog;
+      document.getElementById('deck-count').innerText = state.deck.length;
+
+      // Toggle pulsing inspection cues on Deck/Discard containers when round ends
+      let deckArea = document.getElementById('deck-area');
+      let discardArea = document.getElementById('discard-area');
+      if (state.gameEnded) {
+        deckArea.classList.add('inspectable');
+        discardArea.classList.add('inspectable');
+      } else {
+        deckArea.classList.remove('inspectable');
+        discardArea.classList.remove('inspectable');
+      }
+
+      // Balances
+      for (let i = 0; i < 4; i++) {
+        document.getElementById(`name-${i}`).innerText = state.playerNames[i];
+        let b = state.balances[i];
+        let sign = b >= 0 ? '$' : '-$';
+        document.getElementById(`bal-${i}`).innerText = `Balance: ${sign}${Math.abs(b).toFixed(2)}`;
+      }
+
+      // Buttons
+      let isMyTurn = (state.turn === 0 && !state.gameEnded && !state.isDealing);
+      let p1HandLen = state.hands[0].length;
+      document.getElementById('drawBtn').disabled = !(isMyTurn && p1HandLen === 7);
+
+      let topDiscard = state.discardPile.length > 0 ? state.discardPile[state.discardPile.length - 1] : null;
+      let countInP1Hand = (topDiscard && state.hands[0]) ? state.hands[0].filter(c => c.value === topDiscard.value).length : 0;
+      let isCheatingAttempt = countInP1Hand >= 2;
+
+      document.getElementById('takeBtn').disabled = !(isMyTurn && p1HandLen === 7 && state.discardPile.length > 0 && !isCheatingAttempt);
+
+      // Render Player 1 Hand
+      let p1Div = document.getElementById('hand-0');
+      p1Div.innerHTML = '';
+      state.hands[0].forEach((c, idx) => {
+        p1Div.innerHTML += renderPokerCard(c, isMyTurn && p1HandLen === 8, idx);
+      });
+
+      // Render Bot Hands
+      for (let botIdx = 1; botIdx < 4; botIdx++) {
+        let botDiv = document.getElementById(`hand-${botIdx}`);
+        botDiv.innerHTML = '';
+
+        let shouldReveal = false;
+        if (state.revealStage === 2) shouldReveal = true;
+        if (state.revealStage === 1 && state.winner === botIdx) shouldReveal = true;
+
+        state.hands[botIdx].forEach(c => {
+          if (shouldReveal) {
+            botDiv.innerHTML += renderPokerCard(c);
+          } else {
+            botDiv.innerHTML += `<div class="poker-card back"></div>`;
+          }
+        });
+      }
+
+      // Render Discard Pile
+      let discDiv = document.getElementById('discard');
+      if (state.discardPile.length > 0) {
+        discDiv.innerHTML = '';
+        let recentCards = state.discardPile.slice(-5);
+        recentCards.forEach((c) => {
+          discDiv.innerHTML += renderPokerCard(c, false, 0, c.rotation || 0);
+        });
+      } else {
+        discDiv.innerHTML = '<span style="line-height:100px; color:#aaa;">Empty</span>';
+      }
+    });
+  </script>
+</body>
+</html>
