@@ -7,7 +7,7 @@ app.use(express.static(__dirname));
 
 const BOT_NAMES = ['Ahmad', 'Siti', 'Boon', 'Mei', 'Devi', 'Raju', 'Ken', 'Sarah', 'Farid', 'Lisa'];
 
-// Active rooms storage: { roomCode: { deck, hands, discardPile, turn, winner, status, actionLog, isHuman, balances, gameEnded, isDealing, roomTier, players: [{id, name, seat}] } }
+// Active rooms storage
 let rooms = {};
 
 function createDeck() {
@@ -87,7 +87,7 @@ function getOrCreateRoom(roomCode) {
       turn: 0,
       winner: null,
       status: 'Waiting for players...',
-      actionLog: `Room ${roomCode} created!`,
+      actionLog: `Room ${roomCode} ready!`,
       playerNames: ['Bot 1', 'Bot 2', 'Bot 3', 'Bot 4'],
       isHuman: [false, false, false, false],
       balances: [10.00, 10.00, 10.00, 10.00],
@@ -340,7 +340,7 @@ io.on('connection', (socket) => {
   let playerObj = { id: socket.id, name: 'Guest', seat: -1 };
 
   socket.on('joinRoom', ({ name, roomCode, isSolo }) => {
-    let finalCode = isSolo ? `SOLO_${socket.id.substring(0, 5)}` : (roomCode ? roomCode.trim().toUpperCase() : 'PUBLIC');
+    let finalCode = isSolo ? `SOLO_${socket.id.substring(0, 5)}` : (roomCode ? roomCode.trim().toUpperCase() : 'KUA88');
     
     currentRoom = getOrCreateRoom(finalCode);
     playerObj.name = name ? name.trim() : 'Player 1';

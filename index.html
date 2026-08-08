@@ -154,9 +154,15 @@
       <p style="font-size:13px; margin-bottom: 5px;">Enter Your Nickname:</p>
       <input type="text" id="playerNameInput" class="name-input" placeholder="Enter Your Name" value="Player 1" maxlength="15">
 
+      <!-- Room Action Tabs for Friends Mode -->
       <div id="roomCodeContainer" style="display:none; margin-top:10px;">
-        <p style="font-size:13px; margin-bottom: 5px;">Room Code (Share with friends):</p>
-        <input type="text" id="roomCodeInput" class="name-input" placeholder="e.g. KUA123" value="KUA88" maxlength="10" style="text-transform: uppercase;">
+        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <button id="createRoomBtn" class="mode-btn active" style="font-size:12px; padding:8px;" onclick="setRoomAction('create')">Create Room</button>
+          <button id="joinRoomBtn" class="mode-btn" style="font-size:12px; padding:8px;" onclick="setRoomAction('join')">Join with Code</button>
+        </div>
+
+        <p id="roomInstructionText" style="font-size:13px; margin-bottom: 5px;">Your Room Code (Share with friends):</p>
+        <input type="text" id="roomCodeInput" class="name-input" placeholder="ENTER CODE" value="KUA88" maxlength="10" style="text-transform: uppercase;">
       </div>
 
       <p style="font-size:13px; margin-bottom: 5px; margin-top: 10px;">Select Room Tier:</p>
@@ -254,6 +260,7 @@
     let selectedTier = 10;
     let isSoloMode = true;
     let mySeat = 0;
+    let roomAction = 'create';
 
     setTimeout(() => {
       let splash = document.getElementById('splashScreen');
@@ -317,6 +324,24 @@
       document.getElementById('soloModeBtn').className = isSolo ? 'mode-btn active' : 'mode-btn';
       document.getElementById('friendsModeBtn').className = isSolo ? 'mode-btn' : 'mode-btn active';
       document.getElementById('roomCodeContainer').style.display = isSolo ? 'none' : 'block';
+    }
+
+    function setRoomAction(action) {
+      roomAction = action;
+      document.getElementById('createRoomBtn').className = (action === 'create') ? 'mode-btn active' : 'mode-btn';
+      document.getElementById('joinRoomBtn').className = (action === 'join') ? 'mode-btn active' : 'mode-btn';
+      
+      let inputEl = document.getElementById('roomCodeInput');
+      let textEl = document.getElementById('roomInstructionText');
+
+      if (action === 'create') {
+        textEl.innerText = "Your Room Code (Share with friends):";
+        if (inputEl.value === '') inputEl.value = 'KUA' + Math.floor(100 + Math.random() * 900);
+      } else {
+        textEl.innerText = "Enter Friend's Room Code:";
+        inputEl.value = '';
+        inputEl.placeholder = "e.g. KUA88";
+      }
     }
 
     function selectTier(amount, btn) {
@@ -465,7 +490,6 @@
         });
       }
 
-      // Render other seat hands
       let botSeats = [1, 2, 3];
       botSeats.forEach((seatIdx, displayPos) => {
         let botDiv = document.getElementById(`hand-${displayPos + 1}`);
