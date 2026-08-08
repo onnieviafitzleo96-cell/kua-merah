@@ -95,12 +95,18 @@
       box-shadow: 1px 3px 8px rgba(0,0,0,0.7);
     }
 
-    .flying-card { position: fixed; z-index: 999; pointer-events: none; transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1); }
+    .flying-card {
+      position: fixed;
+      z-index: 3000;
+      pointer-events: none;
+      transition: all 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+    }
+
     .discard-container { position: relative; width: 58px; height: 84px; margin: 0 auto; }
     .discard-container .poker-card { position: absolute; top: 0; left: 0; }
 
-    .inspectable { cursor: pointer; border: 2px dashed #fbc02d; padding: 4px; border-radius: 8px; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(251, 192, 45, 0.7); } 70% { box-shadow: 0 0 0 8px rgba(251, 192, 45, 0); } 100% { box-shadow: 0 0 0 0 rgba(251, 192, 45, 0); } }
+    .inspectable { cursor: pointer; border: 2px dashed #fbc02d; padding: 4px; border-radius: 8px; }
 
     button { padding: 8px 16px; font-size: 13px; font-weight: bold; margin: 3px; cursor: pointer; border-radius: 6px; border: none; background: #fbc02d; color: #111; }
     button:hover { background: #ffd54f; }
@@ -154,7 +160,6 @@
       <p style="font-size:13px; margin-bottom: 5px;">Enter Your Nickname:</p>
       <input type="text" id="playerNameInput" class="name-input" placeholder="Enter Your Name" value="Player 1" maxlength="15">
 
-      <!-- Room Action Tabs for Friends Mode -->
       <div id="roomCodeContainer" style="display:none; margin-top:10px;">
         <div style="display: flex; gap: 8px; margin-bottom: 10px;">
           <button id="createRoomBtn" class="mode-btn active" style="font-size:12px; padding:8px;" onclick="setRoomAction('create')">Create Room</button>
@@ -189,8 +194,9 @@
 
   <h1 style="margin: 2px 0; font-size:24px;">Kua Merah</h1>
   <div>
+    <button id="startMatchBtn" onclick="startGame()">Start Game</button>
     <button id="nextRoundBtn" onclick="startGame()" style="display:none;">Start Next Round</button>
-    <button id="quitBtn" onclick="quitGame()" class="quit-btn" style="display:none;">Quit & Reset Room</button>
+    <button id="quitBtn" onclick="quitGame()" class="quit-btn">Quit & Reset Room</button>
   </div>
   
   <div><span id="actionLog" class="action-banner">Join a room tier to begin.</span></div>
@@ -295,16 +301,40 @@
       } catch(e) {}
     }
 
-    function triggerCardAnimation(source, targetPlayerIdx) {
-      let srcEl = source === 'deck' ? document.getElementById('deck-area') : document.getElementById('discard-area');
-      let targetEl = document.getElementById(`player-box-${targetPlayerIdx}`);
+    function mapSeatToDomIndex(seatIdx) {
+      if (seatIdx === mySeat) return 0;
+      return (seatIdx - mySeat + 4) % 4;
+    }
+
+    function triggerCardAnimation(data) {
+      let srcEl, targetEl;
+
+      if (data.source === 'deck') {
+        srcEl = document.getElementById('deck-area');
+        targetEl = document.getElementById(`player-box-${mapSeatToDomIndex(data.targetPlayer)}`);
+      } else if (data.source === 'discard') {
+        srcEl = document.getElementById('discard-area');
+        targetEl = document.getElementById(`player-box-${mapSeatToDomIndex(data.targetPlayer)}`);
+      } else if (data.source === 'player') {
+        srcEl = document.getElementById(`player-box-${mapSeatToDomIndex(data.sourcePlayer)}`);
+        targetEl = document.getElementById('discard-area');
+      }
+
       if (!srcEl || !targetEl) return;
 
       let srcRect = srcEl.getBoundingClientRect();
       let targetRect = targetEl.getBoundingClientRect();
 
       let flyingCard = document.createElement('div');
-      flyingCard.className = 'poker-card back flying-card';
+      
+      if (data.card) {
+        flyingCard.innerHTML = renderPokerCardHtml(data.card);
+        flyingCard.firstChild.className += ' flying-card';
+        flyingCard = flyingCard.firstChild;
+      } else {
+        flyingCard.className = 'poker-card back flying-card';
+      }
+
       flyingCard.style.left = `${srcRect.left + 5}px`;
       flyingCard.style.top = `${srcRect.top + 5}px`;
 
@@ -313,10 +343,10 @@
       setTimeout(() => {
         flyingCard.style.left = `${targetRect.left + targetRect.width / 2 - 20}px`;
         flyingCard.style.top = `${targetRect.top + targetRect.height / 2 - 30}px`;
-        flyingCard.style.opacity = '0.3';
-      }, 20);
+        flyingCard.style.transform = 'scale(1.1) rotate(5deg)';
+      }, 30);
 
-      setTimeout(() => flyingCard.remove(), 550);
+      setTimeout(() => flyingCard.remove(), 650);
     }
 
     function setPlayMode(isSolo) {
@@ -366,7 +396,7 @@
       } else {
         cardList.forEach((c, idx) => {
           setTimeout(() => {
-            grid.innerHTML += renderPokerCard(c);
+            grid.innerHTML += renderPokerCardHtml(c);
             playCardSound();
           }, idx * 30);
         });
@@ -387,8 +417,11 @@
       socket.emit('setRoomTier', selectedTier);
 
       document.getElementById('startModal').style.display = 'none';
-      document.getElementById('nextRoundBtn').style.display = 'inline-block';
-      document.getElementById('quitBtn').style.display = 'inline-block';
+      
+      // Auto-hide start button for solo mode since it starts automatically
+      if (isSoloMode) {
+        document.getElementById('startMatchBtn').style.display = 'none';
+      }
     }
 
     socket.on('joinedRoomSuccess', (data) => {
@@ -405,7 +438,7 @@
     function takeDiscard() { socket.emit('playerTakeDiscard'); }
     function discard(idx) { socket.emit('discardCard', idx); }
 
-    function renderPokerCard(card, isClickable = false, index = 0, customRotation = 0) {
+    function renderPokerCardHtml(card, isClickable = false, index = 0, customRotation = 0) {
       let colorClass = card.isRed ? 'poker-card red' : 'poker-card';
       let clickAttr = isClickable ? `onclick="discard(${index})"` : '';
       let rotStyle = customRotation !== 0 ? `transform: rotate(${customRotation}deg);` : '';
@@ -447,7 +480,7 @@
     }
 
     socket.on('cardSound', () => playCardSound());
-    socket.on('animateCard', (data) => triggerCardAnimation(data.source, data.targetPlayer));
+    socket.on('animateCard', (data) => triggerCardAnimation(data));
 
     socket.on('stateUpdate', (state) => {
       currentGameState = state;
@@ -460,16 +493,22 @@
       if (state.gameEnded) {
         deckArea.classList.add('inspectable');
         discardArea.classList.add('inspectable');
+        document.getElementById('startMatchBtn').style.display = 'none';
+        document.getElementById('nextRoundBtn').style.display = 'inline-block';
+        document.getElementById('nextRoundBtn').disabled = false; // Always enabled!
       } else {
         deckArea.classList.remove('inspectable');
         discardArea.classList.remove('inspectable');
+        document.getElementById('startMatchBtn').style.display = 'none';
+        document.getElementById('nextRoundBtn').style.display = 'none';
       }
 
-      for (let i = 0; i < 4; i++) {
-        document.getElementById(`name-${i}`).innerText = state.playerNames[i];
-        let b = state.balances[i];
+      for (let sIdx = 0; sIdx < 4; sIdx++) {
+        let domIdx = mapSeatToDomIndex(sIdx);
+        document.getElementById(`name-${domIdx}`).innerText = state.playerNames[sIdx];
+        let b = state.balances[sIdx];
         let sign = b >= 0 ? '$' : '-$';
-        document.getElementById(`bal-${i}`).innerText = `Balance: ${sign}${Math.abs(b).toFixed(2)}`;
+        document.getElementById(`bal-${domIdx}`).innerText = `Balance: ${sign}${Math.abs(b).toFixed(2)}`;
       }
 
       let isMyTurn = (state.turn === mySeat && !state.gameEnded && !state.isDealing);
@@ -486,36 +525,37 @@
       myDiv.innerHTML = '';
       if (state.hands[mySeat]) {
         state.hands[mySeat].forEach((c, idx) => {
-          myDiv.innerHTML += renderPokerCard(c, isMyTurn && myHandLen === 8, idx);
+          myDiv.innerHTML += renderPokerCardHtml(c, isMyTurn && myHandLen === 8, idx);
         });
       }
 
-      let botSeats = [1, 2, 3];
-      botSeats.forEach((seatIdx, displayPos) => {
-        let botDiv = document.getElementById(`hand-${displayPos + 1}`);
+      for (let sIdx = 0; sIdx < 4; sIdx++) {
+        if (sIdx === mySeat) continue;
+        let domIdx = mapSeatToDomIndex(sIdx);
+        let botDiv = document.getElementById(`hand-${domIdx}`);
         botDiv.innerHTML = '';
 
         let shouldReveal = false;
         if (state.revealStage === 2) shouldReveal = true;
-        if (state.revealStage === 1 && state.winner === seatIdx) shouldReveal = true;
+        if (state.revealStage === 1 && state.winner === sIdx) shouldReveal = true;
 
-        if (state.hands[seatIdx]) {
-          state.hands[seatIdx].forEach(c => {
+        if (state.hands[sIdx]) {
+          state.hands[sIdx].forEach(c => {
             if (shouldReveal) {
-              botDiv.innerHTML += renderPokerCard(c);
+              botDiv.innerHTML += renderPokerCardHtml(c);
             } else {
               botDiv.innerHTML += `<div class="poker-card back"></div>`;
             }
           });
         }
-      });
+      }
 
       let discDiv = document.getElementById('discard');
       if (state.discardPile.length > 0) {
         discDiv.innerHTML = '';
         let recentCards = state.discardPile.slice(-5);
         recentCards.forEach((c) => {
-          discDiv.innerHTML += renderPokerCard(c, false, 0, c.rotation || 0);
+          discDiv.innerHTML += renderPokerCardHtml(c, false, 0, c.rotation || 0);
         });
       } else {
         discDiv.innerHTML = '<span class="empty-label">Empty</span>';
