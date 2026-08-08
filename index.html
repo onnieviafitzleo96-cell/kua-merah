@@ -21,7 +21,11 @@
     .modal-box { background: #11361c; border: 2px solid #fbc02d; padding: 25px; border-radius: 14px; max-width: 500px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: 0 0 30px rgba(0,0,0,0.9); }
     .modal-box h2 { color: #fbc02d; margin-top: 0; }
 
-    .name-input { width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #fbc02d; background: #072210; color: white; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 15px; }
+    .mode-toggle { display: flex; gap: 10px; margin-bottom: 15px; }
+    .mode-btn { flex: 1; padding: 10px; background: rgba(255,255,255,0.1); border: 2px solid #fbc02d; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .mode-btn.active { background: #fbc02d; color: #111; }
+
+    .name-input { width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #fbc02d; background: #072210; color: white; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 10px; }
     .name-input:focus { outline: none; border-color: #ffd54f; }
 
     .tier-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
@@ -36,7 +40,6 @@
 
     .action-banner { background: #fbc02d; color: #111; font-weight: bold; padding: 6px 14px; border-radius: 20px; display: inline-block; margin: 8px 0; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
 
-    /* Centered Middle Section */
     .middle-row { display: flex; justify-content: space-between; align-items: stretch; gap: 6px; }
     .side-bot { width: 31%; }
     .center-table { background: rgba(0,0,0,0.45); padding: 10px; border-radius: 10px; border: 1px solid #fbc02d; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 36%; position: relative; }
@@ -48,7 +51,6 @@
     .deck-count-label { font-size: 11px; font-weight: normal; color: white; min-height: 15px; }
     .empty-label { line-height: 84px; color: #aaa; font-size: 11px; }
 
-    /* Authentic Standard Playing Card Styling */
     .poker-card {
       display: inline-block;
       width: 58px;
@@ -105,7 +107,6 @@
     button:disabled { opacity: 0.35; cursor: not-allowed; }
     .quit-btn { background: #e53935; color: white; margin-left: 8px; }
 
-    /* Mobile Refinements */
     @media (max-width: 600px) {
       .poker-card { width: 40px; height: 60px; margin: 1px; }
       .poker-card .corner .rank { font-size: 10px; }
@@ -144,10 +145,21 @@
   <div id="startModal" class="modal-overlay">
     <div class="modal-box">
       <h2>Welcome Player!</h2>
-      <p style="font-size:13px; margin-bottom: 8px;">Enter Your Nickname:</p>
+      
+      <div class="mode-toggle">
+        <button id="soloModeBtn" class="mode-btn active" onclick="setPlayMode(true)">Play Solo vs Bots</button>
+        <button id="friendsModeBtn" class="mode-btn" onclick="setPlayMode(false)">Play with Friends</button>
+      </div>
+
+      <p style="font-size:13px; margin-bottom: 5px;">Enter Your Nickname:</p>
       <input type="text" id="playerNameInput" class="name-input" placeholder="Enter Your Name" value="Player 1" maxlength="15">
 
-      <p style="font-size:13px; margin-bottom: 5px;">Select Room Tier:</p>
+      <div id="roomCodeContainer" style="display:none; margin-top:10px;">
+        <p style="font-size:13px; margin-bottom: 5px;">Room Code (Share with friends):</p>
+        <input type="text" id="roomCodeInput" class="name-input" placeholder="e.g. KUA123" value="KUA88" maxlength="10" style="text-transform: uppercase;">
+      </div>
+
+      <p style="font-size:13px; margin-bottom: 5px; margin-top: 10px;">Select Room Tier:</p>
       <div class="tier-grid">
         <button class="tier-btn selected" onclick="selectTier(10, this)">$10 Room</button>
         <button class="tier-btn" onclick="selectTier(50, this)">$50 Room</button>
@@ -198,7 +210,7 @@
 
         <!-- Center Table -->
         <div class="center-table">
-          <div class="table-watermark">♠ KUA MERAH ♥</div>
+          <div id="watermarkLabel" class="table-watermark">♠ KUA MERAH ♥</div>
           
           <div class="center-content-wrap">
             <div id="deck-area" class="center-col" onclick="inspectCards('deck')">
@@ -240,6 +252,8 @@
     const socket = io();
     let currentGameState = null;
     let selectedTier = 10;
+    let isSoloMode = true;
+    let mySeat = 0;
 
     setTimeout(() => {
       let splash = document.getElementById('splashScreen');
@@ -298,6 +312,13 @@
       setTimeout(() => flyingCard.remove(), 550);
     }
 
+    function setPlayMode(isSolo) {
+      isSoloMode = isSolo;
+      document.getElementById('soloModeBtn').className = isSolo ? 'mode-btn active' : 'mode-btn';
+      document.getElementById('friendsModeBtn').className = isSolo ? 'mode-btn' : 'mode-btn active';
+      document.getElementById('roomCodeContainer').style.display = isSolo ? 'none' : 'block';
+    }
+
     function selectTier(amount, btn) {
       selectedTier = amount;
       document.querySelectorAll('.tier-btn').forEach(b => b.classList.remove('selected'));
@@ -335,20 +356,23 @@
 
     function enterGame() {
       let customName = document.getElementById('playerNameInput').value;
-      socket.emit('setPlayerName', customName);
+      let roomCode = document.getElementById('roomCodeInput').value;
+
+      socket.emit('joinRoom', { name: customName, roomCode: roomCode, isSolo: isSoloMode });
       socket.emit('setRoomTier', selectedTier);
 
       document.getElementById('startModal').style.display = 'none';
       document.getElementById('nextRoundBtn').style.display = 'inline-block';
       document.getElementById('quitBtn').style.display = 'inline-block';
-      startGame();
     }
 
+    socket.on('joinedRoomSuccess', (data) => {
+      mySeat = data.seat;
+      document.getElementById('watermarkLabel').innerText = isSoloMode ? '♠ SOLO ROOM ♥' : `♠ ROOM: ${data.roomCode} ♥`;
+    });
+
     function quitGame() {
-      socket.emit('resetRoom');
-      document.getElementById('startModal').style.display = 'flex';
-      document.getElementById('nextRoundBtn').style.display = 'none';
-      document.getElementById('quitBtn').style.display = 'none';
+      window.location.reload();
     }
 
     function startGame() { socket.emit('startGame'); }
@@ -423,38 +447,44 @@
         document.getElementById(`bal-${i}`).innerText = `Balance: ${sign}${Math.abs(b).toFixed(2)}`;
       }
 
-      let isMyTurn = (state.turn === 0 && !state.gameEnded && !state.isDealing);
-      let p1HandLen = state.hands[0].length;
-      document.getElementById('drawBtn').disabled = !(isMyTurn && p1HandLen === 7);
+      let isMyTurn = (state.turn === mySeat && !state.gameEnded && !state.isDealing);
+      let myHandLen = state.hands[mySeat] ? state.hands[mySeat].length : 0;
+      document.getElementById('drawBtn').disabled = !(isMyTurn && myHandLen === 7);
 
       let topDiscard = state.discardPile.length > 0 ? state.discardPile[state.discardPile.length - 1] : null;
-      let countInP1Hand = (topDiscard && state.hands[0]) ? state.hands[0].filter(c => c.value === topDiscard.value).length : 0;
-      let isCheatingAttempt = countInP1Hand >= 2;
+      let countInMyHand = (topDiscard && state.hands[mySeat]) ? state.hands[mySeat].filter(c => c.value === topDiscard.value).length : 0;
+      let isCheatingAttempt = countInMyHand >= 2;
 
-      document.getElementById('takeBtn').disabled = !(isMyTurn && p1HandLen === 7 && state.discardPile.length > 0 && !isCheatingAttempt);
+      document.getElementById('takeBtn').disabled = !(isMyTurn && myHandLen === 7 && state.discardPile.length > 0 && !isCheatingAttempt);
 
-      let p1Div = document.getElementById('hand-0');
-      p1Div.innerHTML = '';
-      state.hands[0].forEach((c, idx) => {
-        p1Div.innerHTML += renderPokerCard(c, isMyTurn && p1HandLen === 8, idx);
-      });
+      let myDiv = document.getElementById('hand-0');
+      myDiv.innerHTML = '';
+      if (state.hands[mySeat]) {
+        state.hands[mySeat].forEach((c, idx) => {
+          myDiv.innerHTML += renderPokerCard(c, isMyTurn && myHandLen === 8, idx);
+        });
+      }
 
-      for (let botIdx = 1; botIdx < 4; botIdx++) {
-        let botDiv = document.getElementById(`hand-${botIdx}`);
+      // Render other seat hands
+      let botSeats = [1, 2, 3];
+      botSeats.forEach((seatIdx, displayPos) => {
+        let botDiv = document.getElementById(`hand-${displayPos + 1}`);
         botDiv.innerHTML = '';
 
         let shouldReveal = false;
         if (state.revealStage === 2) shouldReveal = true;
-        if (state.revealStage === 1 && state.winner === botIdx) shouldReveal = true;
+        if (state.revealStage === 1 && state.winner === seatIdx) shouldReveal = true;
 
-        state.hands[botIdx].forEach(c => {
-          if (shouldReveal) {
-            botDiv.innerHTML += renderPokerCard(c);
-          } else {
-            botDiv.innerHTML += `<div class="poker-card back"></div>`;
-          }
-        });
-      }
+        if (state.hands[seatIdx]) {
+          state.hands[seatIdx].forEach(c => {
+            if (shouldReveal) {
+              botDiv.innerHTML += renderPokerCard(c);
+            } else {
+              botDiv.innerHTML += `<div class="poker-card back"></div>`;
+            }
+          });
+        }
+      });
 
       let discDiv = document.getElementById('discard');
       if (state.discardPile.length > 0) {

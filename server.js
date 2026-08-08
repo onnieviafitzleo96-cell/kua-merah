@@ -7,37 +7,8 @@ app.use(express.static(__dirname));
 
 const BOT_NAMES = ['Ahmad', 'Siti', 'Boon', 'Mei', 'Devi', 'Raju', 'Ken', 'Sarah', 'Farid', 'Lisa'];
 
-let humanName = 'Player 1';
-let playerNames = [humanName, 'Bot 1', 'Bot 2', 'Bot 3'];
-let balances = [10.00, 10.00, 10.00, 10.00];
-let lastWinnerIdx = 0;
-let roomInitialized = false;
-let currentRoomTier = 10.00;
-
-let gameState = {
-  deck: [],
-  hands: [[], [], [], []],
-  discardPile: [],
-  turn: 0,
-  winner: null,
-  status: 'Select a room tier to begin.',
-  actionLog: '',
-  playerNames: playerNames,
-  balances: balances,
-  gameEnded: false,
-  revealStage: 0,
-  isDealing: false,
-  roomTier: 10.00
-};
-
-function assignBotNames() {
-  if (!roomInitialized) {
-    let shuffled = [...BOT_NAMES].sort(() => Math.random() - 0.5);
-    playerNames = [humanName, shuffled[0], shuffled[1], shuffled[2]];
-    gameState.playerNames = playerNames;
-    roomInitialized = true;
-  }
-}
+// Active rooms storage: { roomCode: { deck, hands, discardPile, turn, winner, status, actionLog, isHuman, balances, gameEnded, isDealing, roomTier, players: [{id, name, seat}] } }
+let rooms = {};
 
 function createDeck() {
   const suits = ['♠', '♥', '♦', '♣'];
@@ -106,12 +77,61 @@ function calculatePayout(winningHand, isInstantWin) {
   return winningHand.reduce((sum, c) => sum + c.points, 0);
 }
 
-function checkForOutOfTurnInterception(discarderIdx, discardedCard) {
+function getOrCreateRoom(roomCode) {
+  if (!rooms[roomCode]) {
+    rooms[roomCode] = {
+      roomCode: roomCode,
+      deck: [],
+      hands: [[], [], [], []],
+      discardPile: [],
+      turn: 0,
+      winner: null,
+      status: 'Waiting for players...',
+      actionLog: `Room ${roomCode} created!`,
+      playerNames: ['Bot 1', 'Bot 2', 'Bot 3', 'Bot 4'],
+      isHuman: [false, false, false, false],
+      balances: [10.00, 10.00, 10.00, 10.00],
+      gameEnded: true,
+      revealStage: 0,
+      isDealing: false,
+      roomTier: 10.00,
+      players: [],
+      lastWinnerIdx: 0
+    };
+  }
+  return rooms[roomCode];
+}
+
+function updateRoomRoster(room) {
+  let names = ['Bot 1', 'Bot 2', 'Bot 3', 'Bot 4'];
+  let isHumanFlags = [false, false, false, false];
+  let shuffledBots = [...BOT_NAMES].sort(() => 0.5 - Math.random());
+
+  room.players.forEach((p, idx) => {
+    if (idx < 4) {
+      names[idx] = p.name;
+      isHumanFlags[idx] = true;
+      p.seat = idx;
+    }
+  });
+
+  for (let i = 0; i < 4; i++) {
+    if (!isHumanFlags[i]) {
+      names[i] = `${shuffledBots[i]} (Bot)`;
+    }
+  }
+
+  room.playerNames = names;
+  room.isHuman = isHumanFlags;
+  io.to(room.roomCode).emit('stateUpdate', room);
+}
+
+function checkForOutOfTurnInterception(room, discarderIdx, discardedCard) {
   let waitingWinners = [];
 
   for (let i = 0; i < 4; i++) {
     if (i === discarderIdx) continue;
-    let testHand = [...gameState.hands[i], discardedCard];
+    let testHand = [...room.hands[i], discardedCard];
     if (checkFourPairs(testHand)) {
       waitingWinners.push(i);
     }
@@ -125,42 +145,42 @@ function checkForOutOfTurnInterception(discarderIdx, discardedCard) {
     });
 
     let winnerIdx = waitingWinners[0];
-    let stolenCard = gameState.discardPile.pop();
-    gameState.hands[winnerIdx].push(stolenCard);
-    autoSortHand(gameState.hands[winnerIdx]);
+    let stolenCard = room.discardPile.pop();
+    room.hands[winnerIdx].push(stolenCard);
+    autoSortHand(room.hands[winnerIdx]);
 
-    io.emit('animateCard', { source: 'discard', targetPlayer: winnerIdx });
-    gameState.actionLog = `⚡ ${playerNames[winnerIdx]} STOLE ${stolenCard.value}${stolenCard.suit} out of turn to WIN!`;
-    io.emit('cardSound');
-    io.emit('stateUpdate', gameState);
+    io.to(room.roomCode).emit('animateCard', { source: 'discard', targetPlayer: winnerIdx });
+    room.actionLog = `⚡ ${room.playerNames[winnerIdx]} STOLE ${stolenCard.value}${stolenCard.suit} out of turn to WIN!`;
+    io.to(room.roomCode).emit('cardSound');
+    io.to(room.roomCode).emit('stateUpdate', room);
 
-    declareWin(winnerIdx, false);
+    declareWin(room, winnerIdx, false);
     return true;
   }
 
   return false;
 }
 
-function dealCardsOneByOne(starterIdx, callback) {
-  gameState.isDealing = true;
+function dealCardsOneByOne(room, starterIdx, callback) {
+  room.isDealing = true;
   let totalCardsToDeal = 29;
   let dealtCount = 0;
   let pIdx = starterIdx;
 
   let dealInterval = setInterval(() => {
-    if (gameState.deck.length === 0 || dealtCount >= totalCardsToDeal) {
-      gameState.isDealing = false;
+    if (room.deck.length === 0 || dealtCount >= totalCardsToDeal) {
+      room.isDealing = false;
       clearInterval(dealInterval);
       callback();
       return;
     }
 
     let targetCount = (pIdx === starterIdx) ? 8 : 7;
-    if (gameState.hands[pIdx].length < targetCount) {
-      gameState.hands[pIdx].push(gameState.deck.pop());
-      autoSortHand(gameState.hands[pIdx]);
-      io.emit('cardSound');
-      io.emit('stateUpdate', gameState);
+    if (room.hands[pIdx].length < targetCount) {
+      room.hands[pIdx].push(room.deck.pop());
+      autoSortHand(room.hands[pIdx]);
+      io.to(room.roomCode).emit('cardSound');
+      io.to(room.roomCode).emit('stateUpdate', room);
       dealtCount++;
     }
 
@@ -168,33 +188,47 @@ function dealCardsOneByOne(starterIdx, callback) {
   }, 180);
 }
 
-function runBotTurn(isInitialDiscard = false) {
-  if (gameState.gameEnded || gameState.turn === 0) return;
+function processTurn(room) {
+  if (room.gameEnded) return;
 
-  let currentBot = gameState.turn;
-  let botHand = gameState.hands[currentBot];
+  let currentTurnSeat = room.turn;
+  let isHumanTurn = room.isHuman[currentTurnSeat];
+
+  if (!isHumanTurn) {
+    runBotTurn(room, false);
+  } else {
+    room.status = `Turn: ${room.playerNames[currentTurnSeat]}`;
+    io.to(room.roomCode).emit('stateUpdate', room);
+  }
+}
+
+function runBotTurn(room, isInitialDiscard = false) {
+  if (room.gameEnded) return;
+
+  let currentBot = room.turn;
+  let botHand = room.hands[currentBot];
 
   setTimeout(() => {
-    if (gameState.gameEnded) return;
+    if (room.gameEnded) return;
 
     let tookDiscard = false;
 
     if (!isInitialDiscard && botHand.length === 7) {
-      if (gameState.discardPile.length > 0) {
-        let topDiscard = gameState.discardPile[gameState.discardPile.length - 1];
+      if (room.discardPile.length > 0) {
+        let topDiscard = room.discardPile[room.discardPile.length - 1];
         let testHand = [...botHand, topDiscard];
 
         if (checkFourPairs(testHand)) {
-          botHand.push(gameState.discardPile.pop());
+          botHand.push(room.discardPile.pop());
           autoSortHand(botHand);
           tookDiscard = true;
 
-          io.emit('animateCard', { source: 'discard', targetPlayer: currentBot });
-          gameState.actionLog = `🎴 ${playerNames[currentBot]} took the DISCARD card to WIN!`;
-          io.emit('cardSound');
-          io.emit('stateUpdate', gameState);
+          io.to(room.roomCode).emit('animateCard', { source: 'discard', targetPlayer: currentBot });
+          room.actionLog = `🎴 ${room.playerNames[currentBot]} took the DISCARD card to WIN!`;
+          io.to(room.roomCode).emit('cardSound');
+          io.to(room.roomCode).emit('stateUpdate', room);
 
-          setTimeout(() => declareWin(currentBot, false), 1500);
+          setTimeout(() => declareWin(room, currentBot, false), 1500);
           return;
         }
 
@@ -205,39 +239,39 @@ function runBotTurn(isInitialDiscard = false) {
         });
 
         if (hasSingleMatchingCard && !isCheating) {
-          botHand.push(gameState.discardPile.pop());
+          botHand.push(room.discardPile.pop());
           autoSortHand(botHand);
           tookDiscard = true;
 
-          io.emit('animateCard', { source: 'discard', targetPlayer: currentBot });
-          gameState.actionLog = `🎴 ${playerNames[currentBot]} took ${topDiscard.value}${topDiscard.suit} from DISCARD to form a pair!`;
-          io.emit('cardSound');
-          io.emit('stateUpdate', gameState);
+          io.to(room.roomCode).emit('animateCard', { source: 'discard', targetPlayer: currentBot });
+          room.actionLog = `🎴 ${room.playerNames[currentBot]} took ${topDiscard.value}${topDiscard.suit} from DISCARD!`;
+          io.to(room.roomCode).emit('cardSound');
+          io.to(room.roomCode).emit('stateUpdate', room);
         }
       }
 
       if (!tookDiscard) {
-        if (gameState.deck.length === 0) {
-          endGameNoWinner();
+        if (room.deck.length === 0) {
+          endGameNoWinner(room);
           return;
         }
-        botHand.push(gameState.deck.pop());
+        botHand.push(room.deck.pop());
         autoSortHand(botHand);
 
-        io.emit('animateCard', { source: 'deck', targetPlayer: currentBot });
-        gameState.actionLog = `📥 ${playerNames[currentBot]} drew from MIDDLE DECK.`;
-        io.emit('cardSound');
-        io.emit('stateUpdate', gameState);
+        io.to(room.roomCode).emit('animateCard', { source: 'deck', targetPlayer: currentBot });
+        room.actionLog = `📥 ${room.playerNames[currentBot]} drew from MIDDLE DECK.`;
+        io.to(room.roomCode).emit('cardSound');
+        io.to(room.roomCode).emit('stateUpdate', room);
       }
 
       if (checkFourPairs(botHand)) {
-        setTimeout(() => declareWin(currentBot, false), 1500);
+        setTimeout(() => declareWin(room, currentBot, false), 1500);
         return;
       }
     }
 
     setTimeout(() => {
-      if (gameState.gameEnded) return;
+      if (room.gameEnded) return;
 
       let discardIndex = 0;
       for (let i = 0; i < botHand.length; i++) {
@@ -249,182 +283,187 @@ function runBotTurn(isInitialDiscard = false) {
       }
 
       let card = botHand.splice(discardIndex, 1)[0];
-      gameState.discardPile.push(card);
+      room.discardPile.push(card);
       autoSortHand(botHand);
-      io.emit('cardSound');
+      io.to(room.roomCode).emit('cardSound');
 
-      gameState.actionLog = `📤 ${playerNames[currentBot]} discarded ${card.value}${card.suit}.`;
+      room.actionLog = `📤 ${room.playerNames[currentBot]} discarded ${card.value}${card.suit}.`;
 
-      let intercepted = checkForOutOfTurnInterception(currentBot, card);
+      let intercepted = checkForOutOfTurnInterception(room, currentBot, card);
 
       if (!intercepted) {
-        gameState.turn = (gameState.turn + 1) % 4;
-        gameState.status = `Current Turn: ${playerNames[gameState.turn]}`;
-        io.emit('stateUpdate', gameState);
-
-        if (gameState.turn !== 0) {
-          runBotTurn(false);
-        }
+        room.turn = (room.turn + 1) % 4;
+        processTurn(room);
       }
     }, 2000);
   }, isInitialDiscard ? 1000 : 2500);
 }
 
-function declareWin(playerIdx, isInstantWin) {
-  gameState.winner = playerIdx;
-  gameState.gameEnded = true;
-  lastWinnerIdx = playerIdx;
+function declareWin(room, playerIdx, isInstantWin) {
+  room.winner = playerIdx;
+  room.gameEnded = true;
+  room.lastWinnerIdx = playerIdx;
 
-  let totalPoints = calculatePayout(gameState.hands[playerIdx], isInstantWin);
-  let scale = (currentRoomTier / 10.00);
+  let totalPoints = calculatePayout(room.hands[playerIdx], isInstantWin);
+  let scale = (room.roomTier / 10.00);
   let perPlayerCost = (totalPoints * 0.10) * scale;
   let totalWinnings = perPlayerCost * 3;
 
   for (let i = 0; i < 4; i++) {
     if (i === playerIdx) {
-      balances[i] += totalWinnings;
+      room.balances[i] += totalWinnings;
     } else {
-      balances[i] -= perPlayerCost;
+      room.balances[i] -= perPlayerCost;
     }
   }
 
-  gameState.balances = balances;
-  gameState.status = `🎉 ${playerNames[playerIdx]} Wins! +$${totalWinnings.toFixed(2)}`;
-
-  gameState.revealStage = 1;
-  io.emit('stateUpdate', gameState);
+  room.status = `🎉 ${room.playerNames[playerIdx]} Wins! +$${totalWinnings.toFixed(2)}`;
+  room.revealStage = 1;
+  io.to(room.roomCode).emit('stateUpdate', room);
 
   setTimeout(() => {
-    gameState.revealStage = 2;
-    io.emit('stateUpdate', gameState);
+    room.revealStage = 2;
+    io.to(room.roomCode).emit('stateUpdate', room);
   }, 2500);
 }
 
-function endGameNoWinner() {
-  gameState.gameEnded = true;
-  gameState.revealStage = 2;
-  gameState.actionLog = "Deck empty!";
-  gameState.status = "No winner this round. All cards revealed.";
-  io.emit('stateUpdate', gameState);
+function endGameNoWinner(room) {
+  room.gameEnded = true;
+  room.revealStage = 2;
+  room.actionLog = "Deck empty!";
+  room.status = "No winner this round. All cards revealed.";
+  io.to(room.roomCode).emit('stateUpdate', room);
 }
 
 io.on('connection', (socket) => {
-  socket.on('setPlayerName', (name) => {
-    if (name && name.trim().length > 0) {
-      humanName = name.trim();
-      playerNames[0] = humanName;
-      gameState.playerNames = playerNames;
-    }
-  });
+  let currentRoom = null;
+  let playerObj = { id: socket.id, name: 'Guest', seat: -1 };
 
-  socket.on('resetRoom', () => {
-    roomInitialized = false;
-    balances = [10.00, 10.00, 10.00, 10.00];
-    lastWinnerIdx = 0;
-    assignBotNames();
-    gameState.balances = balances;
-    gameState.gameEnded = true;
-    gameState.status = "Room reset. Back to $10 starter tier.";
-    io.emit('stateUpdate', gameState);
+  socket.on('joinRoom', ({ name, roomCode, isSolo }) => {
+    let finalCode = isSolo ? `SOLO_${socket.id.substring(0, 5)}` : (roomCode ? roomCode.trim().toUpperCase() : 'PUBLIC');
+    
+    currentRoom = getOrCreateRoom(finalCode);
+    playerObj.name = name ? name.trim() : 'Player 1';
+    
+    socket.join(finalCode);
+    currentRoom.players.push(playerObj);
+    updateRoomRoster(currentRoom);
+
+    socket.emit('joinedRoomSuccess', { roomCode: finalCode, seat: playerObj.seat });
   });
 
   socket.on('setRoomTier', (tierAmount) => {
-    currentRoomTier = parseFloat(tierAmount);
-    gameState.roomTier = currentRoomTier;
+    if (!currentRoom) return;
+    currentRoom.roomTier = parseFloat(tierAmount);
   });
 
   socket.on('startGame', () => {
-    assignBotNames();
-    gameState.deck = createDeck();
-    gameState.hands = [[], [], [], []];
-    gameState.discardPile = [];
-    gameState.winner = null;
-    gameState.gameEnded = false;
-    gameState.revealStage = 0;
+    if (!currentRoom || !currentRoom.gameEnded) return;
 
-    let starterIdx = lastWinnerIdx;
-    gameState.turn = starterIdx;
-    gameState.actionLog = `$${currentRoomTier} Room - ${playerNames[starterIdx]} starts first!`;
-    gameState.status = 'Shuffling & Dealing...';
+    updateRoomRoster(currentRoom);
+    currentRoom.deck = createDeck();
+    currentRoom.hands = [[], [], [], []];
+    currentRoom.discardPile = [];
+    currentRoom.winner = null;
+    currentRoom.gameEnded = false;
+    currentRoom.revealStage = 0;
 
-    dealCardsOneByOne(starterIdx, () => {
-      if (checkFourPairs(gameState.hands[starterIdx])) {
-        declareWin(starterIdx, true);
+    let starterIdx = currentRoom.lastWinnerIdx;
+    currentRoom.turn = starterIdx;
+    currentRoom.actionLog = `$${currentRoom.roomTier} Room - ${currentRoom.playerNames[starterIdx]} starts first!`;
+    currentRoom.status = 'Shuffling & Dealing...';
+
+    dealCardsOneByOne(currentRoom, starterIdx, () => {
+      if (checkFourPairs(currentRoom.hands[starterIdx])) {
+        declareWin(currentRoom, starterIdx, true);
         return;
       }
 
-      let starterName = (starterIdx === 0) ? `${humanName}, you hold 8 cards. Discard one to kickstart!` : `${playerNames[starterIdx]} holds 8 cards and starts first.`;
-      gameState.actionLog = `Cards dealt! ${starterName}`;
-      gameState.status = `Current Turn: ${playerNames[starterIdx]}`;
-      io.emit('stateUpdate', gameState);
-
-      if (starterIdx !== 0) {
-        runBotTurn(true);
+      currentRoom.actionLog = `Cards dealt! ${currentRoom.playerNames[starterIdx]} starts first with 8 cards.`;
+      
+      if (currentRoom.isHuman[starterIdx]) {
+        currentRoom.status = `Turn: ${currentRoom.playerNames[starterIdx]} (Discard 1 card to kickstart)`;
+        io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
+      } else {
+        runBotTurn(currentRoom, true);
       }
     });
   });
 
   socket.on('playerDraw', () => {
-    if (gameState.turn !== 0 || gameState.hands[0].length >= 8 || gameState.gameEnded || gameState.isDealing) return;
-    if (gameState.deck.length > 0) {
-      gameState.hands[0].push(gameState.deck.pop());
-      autoSortHand(gameState.hands[0]);
+    if (!currentRoom) return;
+    let pSeat = playerObj.seat;
+    if (pSeat !== currentRoom.turn || currentRoom.hands[pSeat].length >= 8 || currentRoom.gameEnded || currentRoom.isDealing) return;
+    
+    if (currentRoom.deck.length > 0) {
+      currentRoom.hands[pSeat].push(currentRoom.deck.pop());
+      autoSortHand(currentRoom.hands[pSeat]);
 
-      io.emit('animateCard', { source: 'deck', targetPlayer: 0 });
-      gameState.actionLog = `📥 ${humanName} drew from MIDDLE DECK.`;
-      io.emit('cardSound');
+      io.to(currentRoom.roomCode).emit('animateCard', { source: 'deck', targetPlayer: pSeat });
+      currentRoom.actionLog = `📥 ${playerObj.name} drew from MIDDLE DECK.`;
+      io.to(currentRoom.roomCode).emit('cardSound');
 
-      if (checkFourPairs(gameState.hands[0])) {
-        declareWin(0, false);
+      if (checkFourPairs(currentRoom.hands[pSeat])) {
+        declareWin(currentRoom, pSeat, false);
         return;
       }
     } else {
-      endGameNoWinner();
+      endGameNoWinner(currentRoom);
       return;
     }
-    io.emit('stateUpdate', gameState);
+    io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
   });
 
   socket.on('playerTakeDiscard', () => {
-    if (gameState.turn !== 0 || gameState.discardPile.length === 0 || gameState.gameEnded || gameState.isDealing) return;
-    let topDiscard = gameState.discardPile[gameState.discardPile.length - 1];
+    if (!currentRoom) return;
+    let pSeat = playerObj.seat;
+    if (pSeat !== currentRoom.turn || currentRoom.discardPile.length === 0 || currentRoom.gameEnded || currentRoom.isDealing) return;
+    let topDiscard = currentRoom.discardPile[currentRoom.discardPile.length - 1];
 
-    if (isPointSwappingCheating(gameState.hands[0], topDiscard)) {
-      gameState.actionLog = "❌ Illegal Move! You cannot swap discard cards to upgrade existing pairs.";
-      io.emit('stateUpdate', gameState);
+    if (isPointSwappingCheating(currentRoom.hands[pSeat], topDiscard)) {
+      currentRoom.actionLog = "❌ Illegal Move! Point-swapping existing pairs is not allowed.";
+      io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
       return;
     }
 
-    gameState.hands[0].push(gameState.discardPile.pop());
-    autoSortHand(gameState.hands[0]);
+    currentRoom.hands[pSeat].push(currentRoom.discardPile.pop());
+    autoSortHand(currentRoom.hands[pSeat]);
 
-    io.emit('animateCard', { source: 'discard', targetPlayer: 0 });
-    gameState.actionLog = `🎴 ${humanName} took from DISCARD pile!`;
-    io.emit('cardSound');
+    io.to(currentRoom.roomCode).emit('animateCard', { source: 'discard', targetPlayer: pSeat });
+    currentRoom.actionLog = `🎴 ${playerObj.name} took from DISCARD pile!`;
+    io.to(currentRoom.roomCode).emit('cardSound');
 
-    if (checkFourPairs(gameState.hands[0])) {
-      declareWin(0, false);
+    if (checkFourPairs(currentRoom.hands[pSeat])) {
+      declareWin(currentRoom, pSeat, false);
       return;
     }
-    io.emit('stateUpdate', gameState);
+    io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
   });
 
   socket.on('discardCard', (cardIndex) => {
-    if (gameState.turn !== 0 || gameState.hands[0].length !== 8 || gameState.gameEnded || gameState.isDealing) return;
-    let card = gameState.hands[0].splice(cardIndex, 1)[0];
-    gameState.discardPile.push(card);
-    autoSortHand(gameState.hands[0]);
+    if (!currentRoom) return;
+    let pSeat = playerObj.seat;
+    if (pSeat !== currentRoom.turn || currentRoom.hands[pSeat].length !== 8 || currentRoom.gameEnded || currentRoom.isDealing) return;
+    
+    let card = currentRoom.hands[pSeat].splice(cardIndex, 1)[0];
+    currentRoom.discardPile.push(card);
+    autoSortHand(currentRoom.hands[pSeat]);
 
-    gameState.actionLog = `📤 ${humanName} discarded ${card.value}${card.suit}.`;
-    io.emit('cardSound');
+    currentRoom.actionLog = `📤 ${playerObj.name} discarded ${card.value}${card.suit}.`;
+    io.to(currentRoom.roomCode).emit('cardSound');
 
-    let intercepted = checkForOutOfTurnInterception(0, card);
+    let intercepted = checkForOutOfTurnInterception(currentRoom, pSeat, card);
 
     if (!intercepted) {
-      gameState.turn = 1;
-      gameState.status = `${playerNames[1]}'s turn...`;
-      io.emit('stateUpdate', gameState);
-      runBotTurn(false);
+      currentRoom.turn = (currentRoom.turn + 1) % 4;
+      processTurn(currentRoom);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    if (currentRoom) {
+      currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
+      updateRoomRoster(currentRoom);
     }
   });
 });
