@@ -7,10 +7,12 @@ app.use(express.static(__dirname));
 
 const BOT_NAMES = ['Ahmad', 'Siti', 'Boon', 'Mei', 'Devi', 'Raju', 'Ken', 'Sarah', 'Farid', 'Lisa'];
 
-let playerNames = ['You (Player 1)', 'Bot 1', 'Bot 2', 'Bot 3'];
+let humanName = 'Player 1';
+let playerNames = [humanName, 'Bot 1', 'Bot 2', 'Bot 3'];
 let balances = [10.00, 10.00, 10.00, 10.00];
 let lastWinnerIdx = 0;
 let roomInitialized = false;
+let currentRoomTier = 10.00;
 
 let gameState = {
   deck: [],
@@ -18,19 +20,20 @@ let gameState = {
   discardPile: [],
   turn: 0,
   winner: null,
-  status: 'Waiting to start...',
+  status: 'Select a room tier to begin.',
   actionLog: '',
   playerNames: playerNames,
   balances: balances,
   gameEnded: false,
   revealStage: 0,
-  isDealing: false
+  isDealing: false,
+  roomTier: 10.00
 };
 
 function assignBotNames() {
   if (!roomInitialized) {
     let shuffled = [...BOT_NAMES].sort(() => Math.random() - 0.5);
-    playerNames = ['You (Player 1)', shuffled[0], shuffled[1], shuffled[2]];
+    playerNames = [humanName, shuffled[0], shuffled[1], shuffled[2]];
     gameState.playerNames = playerNames;
     roomInitialized = true;
   }
@@ -45,9 +48,9 @@ function createDeck() {
       let isRed = (s === '♥' || s === '♦');
       let pts = 0;
       if (isRed) {
-        if (['J','Q','K'].includes(v)) pts = 2; // Updated Rule: Red J, Q, K are worth 2 points
-        else if (v === 'A') pts = 1; // Red A is worth 1 point
-        else pts = parseInt(v); // Number cards (2-10) are face value
+        if (['J','Q','K'].includes(v)) pts = 2;
+        else if (v === 'A') pts = 1;
+        else pts = parseInt(v);
       }
       let rotation = (Math.random() * 30 - 15).toFixed(1);
       deck.push({ suit: s, value: v, isRed: isRed, points: pts, rotation: rotation, id: v + s });
@@ -56,31 +59,19 @@ function createDeck() {
   return deck.sort(() => Math.random() - 0.5);
 }
 
-// Auto-sorts pairs to the left and single cards to the right
 function autoSortHand(hand) {
   const rankOrder = {'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13,'A':14};
-  
   let counts = {};
   for (let c of hand) counts[c.value] = (counts[c.value] || 0) + 1;
 
   return hand.sort((a, b) => {
     let countA = counts[a.value];
     let countB = counts[b.value];
-
-    // Priority 1: Paired cards (count >= 2) move to the left
     let isPairA = countA >= 2 ? 1 : 0;
     let isPairB = countB >= 2 ? 1 : 0;
 
-    if (isPairA !== isPairB) {
-      return isPairB - isPairA; // Pairs first
-    }
-
-    // Priority 2: Sort by value rank
-    if (rankOrder[a.value] !== rankOrder[b.value]) {
-      return rankOrder[a.value] - rankOrder[b.value];
-    }
-
-    // Priority 3: Keep identical value cards adjacent
+    if (isPairA !== isPairB) return isPairB - isPairA;
+    if (rankOrder[a.value] !== rankOrder[b.value]) return rankOrder[a.value] - rankOrder[b.value];
     return a.suit.localeCompare(b.suit);
   });
 }
@@ -105,7 +96,6 @@ function isPointSwappingCheating(hand, topDiscardCard) {
 
 function calculatePayout(winningHand, isInstantWin) {
   if (isInstantWin) return 50;
-  
   let redCount = winningHand.filter(c => c.isRed).length;
   let faceCount = winningHand.filter(c => ['J','Q','K'].includes(c.value)).length;
   let hasRedAce = winningHand.some(c => c.isRed && c.value === 'A');
@@ -201,7 +191,7 @@ function runBotTurn(isInitialDiscard = false) {
 
           io.emit('animateCard', { source: 'discard', targetPlayer: currentBot });
           gameState.actionLog = `🎴 ${playerNames[currentBot]} took the DISCARD card to WIN!`;
-          io.emit('cardSound'); // Ensure sound fires for bot
+          io.emit('cardSound');
           io.emit('stateUpdate', gameState);
 
           setTimeout(() => declareWin(currentBot, false), 1500);
@@ -221,7 +211,7 @@ function runBotTurn(isInitialDiscard = false) {
 
           io.emit('animateCard', { source: 'discard', targetPlayer: currentBot });
           gameState.actionLog = `🎴 ${playerNames[currentBot]} took ${topDiscard.value}${topDiscard.suit} from DISCARD to form a pair!`;
-          io.emit('cardSound'); // Ensure sound fires for bot
+          io.emit('cardSound');
           io.emit('stateUpdate', gameState);
         }
       }
@@ -236,7 +226,7 @@ function runBotTurn(isInitialDiscard = false) {
 
         io.emit('animateCard', { source: 'deck', targetPlayer: currentBot });
         gameState.actionLog = `📥 ${playerNames[currentBot]} drew from MIDDLE DECK.`;
-        io.emit('cardSound'); // Ensure sound fires for bot
+        io.emit('cardSound');
         io.emit('stateUpdate', gameState);
       }
 
@@ -246,7 +236,6 @@ function runBotTurn(isInitialDiscard = false) {
       }
     }
 
-    // BOT DISCARD PHASE
     setTimeout(() => {
       if (gameState.gameEnded) return;
 
@@ -262,7 +251,7 @@ function runBotTurn(isInitialDiscard = false) {
       let card = botHand.splice(discardIndex, 1)[0];
       gameState.discardPile.push(card);
       autoSortHand(botHand);
-      io.emit('cardSound'); // Ensure sound fires for bot discard
+      io.emit('cardSound');
 
       gameState.actionLog = `📤 ${playerNames[currentBot]} discarded ${card.value}${card.suit}.`;
 
@@ -287,7 +276,8 @@ function declareWin(playerIdx, isInstantWin) {
   lastWinnerIdx = playerIdx;
 
   let totalPoints = calculatePayout(gameState.hands[playerIdx], isInstantWin);
-  let perPlayerCost = (totalPoints * 0.10);
+  let scale = (currentRoomTier / 10.00);
+  let perPlayerCost = (totalPoints * 0.10) * scale;
   let totalWinnings = perPlayerCost * 3;
 
   for (let i = 0; i < 4; i++) {
@@ -319,6 +309,14 @@ function endGameNoWinner() {
 }
 
 io.on('connection', (socket) => {
+  socket.on('setPlayerName', (name) => {
+    if (name && name.trim().length > 0) {
+      humanName = name.trim();
+      playerNames[0] = humanName;
+      gameState.playerNames = playerNames;
+    }
+  });
+
   socket.on('resetRoom', () => {
     roomInitialized = false;
     balances = [10.00, 10.00, 10.00, 10.00];
@@ -326,8 +324,13 @@ io.on('connection', (socket) => {
     assignBotNames();
     gameState.balances = balances;
     gameState.gameEnded = true;
-    gameState.status = "Room reset. Ready for new game.";
+    gameState.status = "Room reset. Back to $10 starter tier.";
     io.emit('stateUpdate', gameState);
+  });
+
+  socket.on('setRoomTier', (tierAmount) => {
+    currentRoomTier = parseFloat(tierAmount);
+    gameState.roomTier = currentRoomTier;
   });
 
   socket.on('startGame', () => {
@@ -341,7 +344,7 @@ io.on('connection', (socket) => {
 
     let starterIdx = lastWinnerIdx;
     gameState.turn = starterIdx;
-    gameState.actionLog = `${playerNames[starterIdx]} starts first this round!`;
+    gameState.actionLog = `$${currentRoomTier} Room - ${playerNames[starterIdx]} starts first!`;
     gameState.status = 'Shuffling & Dealing...';
 
     dealCardsOneByOne(starterIdx, () => {
@@ -350,7 +353,7 @@ io.on('connection', (socket) => {
         return;
       }
 
-      let starterName = (starterIdx === 0) ? "You hold 8 cards. Click an unwanted card to discard & kickstart!" : `${playerNames[starterIdx]} holds 8 cards and starts first.`;
+      let starterName = (starterIdx === 0) ? `${humanName}, you hold 8 cards. Discard one to kickstart!` : `${playerNames[starterIdx]} holds 8 cards and starts first.`;
       gameState.actionLog = `Cards dealt! ${starterName}`;
       gameState.status = `Current Turn: ${playerNames[starterIdx]}`;
       io.emit('stateUpdate', gameState);
@@ -368,7 +371,7 @@ io.on('connection', (socket) => {
       autoSortHand(gameState.hands[0]);
 
       io.emit('animateCard', { source: 'deck', targetPlayer: 0 });
-      gameState.actionLog = '📥 You drew from MIDDLE DECK.';
+      gameState.actionLog = `📥 ${humanName} drew from MIDDLE DECK.`;
       io.emit('cardSound');
 
       if (checkFourPairs(gameState.hands[0])) {
@@ -396,7 +399,7 @@ io.on('connection', (socket) => {
     autoSortHand(gameState.hands[0]);
 
     io.emit('animateCard', { source: 'discard', targetPlayer: 0 });
-    gameState.actionLog = '🎴 You took from DISCARD pile!';
+    gameState.actionLog = `🎴 ${humanName} took from DISCARD pile!`;
     io.emit('cardSound');
 
     if (checkFourPairs(gameState.hands[0])) {
@@ -412,7 +415,7 @@ io.on('connection', (socket) => {
     gameState.discardPile.push(card);
     autoSortHand(gameState.hands[0]);
 
-    gameState.actionLog = `📤 You discarded ${card.value}${card.suit}.`;
+    gameState.actionLog = `📤 ${humanName} discarded ${card.value}${card.suit}.`;
     io.emit('cardSound');
 
     let intercepted = checkForOutOfTurnInterception(0, card);
