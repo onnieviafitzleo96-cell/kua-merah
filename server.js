@@ -208,8 +208,10 @@ function startRoundLogic(room) {
 
   dealCardsOneByOne(room, starterIdx, () => {
     if (checkFourPairs(room.hands[starterIdx])) {
-      declareWin(room, starterIdx, true);
-      return;
+      if (!room.isHuman[starterIdx]) {
+        declareWin(room, starterIdx, true);
+        return;
+      }
     }
 
     room.actionLog = `Cards dealt! ${room.playerNames[starterIdx]} starts first with 8 cards.`;
@@ -393,7 +395,6 @@ io.on('connection', (socket) => {
 
     socket.emit('joinedRoomSuccess', { roomCode: finalCode, seat: playerObj.seat });
 
-    // Auto-start instantly for Solo Mode
     if (isSolo) {
       setTimeout(() => startRoundLogic(currentRoom), 800);
     }
@@ -410,6 +411,14 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('claimWin', () => {
+    if (!currentRoom || currentRoom.gameEnded) return;
+    let pSeat = playerObj.seat;
+    if (checkFourPairs(currentRoom.hands[pSeat])) {
+      declareWin(currentRoom, pSeat, false);
+    }
+  });
+
   socket.on('playerDraw', () => {
     if (!currentRoom) return;
     let pSeat = playerObj.seat;
@@ -423,11 +432,6 @@ io.on('connection', (socket) => {
       io.to(currentRoom.roomCode).emit('animateCard', { source: 'deck', targetPlayer: pSeat, card: c });
       currentRoom.actionLog = `📥 ${playerObj.name} drew from MIDDLE DECK.`;
       io.to(currentRoom.roomCode).emit('cardSound');
-
-      if (checkFourPairs(currentRoom.hands[pSeat])) {
-        declareWin(currentRoom, pSeat, false);
-        return;
-      }
     } else {
       endGameNoWinner(currentRoom);
       return;
@@ -455,10 +459,6 @@ io.on('connection', (socket) => {
     currentRoom.actionLog = `🎴 ${playerObj.name} took ${c.value}${c.suit} from DISCARD pile!`;
     io.to(currentRoom.roomCode).emit('cardSound');
 
-    if (checkFourPairs(currentRoom.hands[pSeat])) {
-      declareWin(currentRoom, pSeat, false);
-      return;
-    }
     io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
   });
 
@@ -479,7 +479,7 @@ io.on('connection', (socket) => {
 
     if (!intercepted) {
       currentRoom.turn = (currentRoom.turn + 1) % 4;
-      io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
+      io.to(currentRoom.roomCode).emit('stateUpdate', room = currentRoom);
       processTurn(currentRoom);
     }
   });

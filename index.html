@@ -112,6 +112,16 @@
     button:hover { background: #ffd54f; }
     button:disabled { opacity: 0.35; cursor: not-allowed; }
     .quit-btn { background: #e53935; color: white; margin-left: 8px; }
+    
+    .claim-win-btn {
+      background: #2e7d32;
+      color: white;
+      font-size: 14px;
+      border: 2px solid #4caf50;
+      box-shadow: 0 0 12px #4caf50;
+      animation: pulseWin 1.2s infinite alternate;
+    }
+    @keyframes pulseWin { 0% { transform: scale(1); } 100% { transform: scale(1.06); } }
 
     @media (max-width: 600px) {
       .poker-card { width: 40px; height: 60px; margin: 1px; }
@@ -195,6 +205,7 @@
   <h1 style="margin: 2px 0; font-size:24px;">Kua Merah</h1>
   <div>
     <button id="startMatchBtn" onclick="startGame()">Start Game</button>
+    <button id="claimWinBtn" class="claim-win-btn" onclick="claimWin()" style="display:none;">🏆 DECLARE WIN (4 PAIRS)</button>
     <button id="nextRoundBtn" onclick="startGame()" style="display:none;">Start Next Round</button>
     <button id="quitBtn" onclick="quitGame()" class="quit-btn">Quit & Reset Room</button>
   </div>
@@ -349,6 +360,18 @@
       setTimeout(() => flyingCard.remove(), 650);
     }
 
+    function checkFourPairsFront(hand) {
+      if (!hand || hand.length !== 8) return false;
+      let counts = {};
+      for (let c of hand) counts[c.value] = (counts[c.value] || 0) + 1;
+      let pairs = 0;
+      for (let val in counts) {
+        if (counts[val] === 2) pairs++;
+        if (counts[val] === 4) pairs += 2;
+      }
+      return pairs === 4;
+    }
+
     function setPlayMode(isSolo) {
       isSoloMode = isSolo;
       document.getElementById('soloModeBtn').className = isSolo ? 'mode-btn active' : 'mode-btn';
@@ -418,7 +441,6 @@
 
       document.getElementById('startModal').style.display = 'none';
       
-      // Auto-hide start button for solo mode since it starts automatically
       if (isSoloMode) {
         document.getElementById('startMatchBtn').style.display = 'none';
       }
@@ -434,6 +456,7 @@
     }
 
     function startGame() { socket.emit('startGame'); }
+    function claimWin() { socket.emit('claimWin'); }
     function drawCard() { socket.emit('playerDraw'); }
     function takeDiscard() { socket.emit('playerTakeDiscard'); }
     function discard(idx) { socket.emit('discardCard', idx); }
@@ -495,12 +518,19 @@
         discardArea.classList.add('inspectable');
         document.getElementById('startMatchBtn').style.display = 'none';
         document.getElementById('nextRoundBtn').style.display = 'inline-block';
-        document.getElementById('nextRoundBtn').disabled = false; // Always enabled!
+        document.getElementById('claimWinBtn').style.display = 'none';
       } else {
         deckArea.classList.remove('inspectable');
         discardArea.classList.remove('inspectable');
         document.getElementById('startMatchBtn').style.display = 'none';
         document.getElementById('nextRoundBtn').style.display = 'none';
+
+        // Check if current human player holds 4 pairs to display Claim Win button option
+        if (checkFourPairsFront(state.hands[mySeat])) {
+          document.getElementById('claimWinBtn').style.display = 'inline-block';
+        } else {
+          document.getElementById('claimWinBtn').style.display = 'none';
+        }
       }
 
       for (let sIdx = 0; sIdx < 4; sIdx++) {
