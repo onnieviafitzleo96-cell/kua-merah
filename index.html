@@ -39,9 +39,11 @@
     /* Centered Middle Section */
     .middle-row { display: flex; justify-content: space-between; align-items: stretch; gap: 6px; }
     .side-bot { width: 31%; }
-    .center-table { background: rgba(0,0,0,0.45); padding: 10px; border-radius: 10px; border: 1px solid #fbc02d; display: flex; justify-content: space-evenly; align-items: center; width: 36%; }
-    .center-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 50%; height: 100%; gap: 4px; }
+    .center-table { background: rgba(0,0,0,0.45); padding: 10px; border-radius: 10px; border: 1px solid #fbc02d; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 36%; position: relative; }
+    .center-content-wrap { display: flex; justify-content: space-evenly; align-items: center; width: 100%; }
+    .center-col { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 50%; gap: 4px; }
     
+    .table-watermark { font-size: 11px; font-weight: 900; color: rgba(251, 192, 45, 0.35); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; user-select: none; }
     .pile-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; white-space: nowrap; }
     .deck-count-label { font-size: 11px; font-weight: normal; color: white; min-height: 15px; }
     .empty-label { line-height: 84px; color: #aaa; font-size: 11px; }
@@ -114,13 +116,13 @@
       button { padding: 6px 10px; font-size: 11px; margin: 2px; }
       .tier-grid { grid-template-columns: repeat(2, 1fr); }
       
-      /* Mobile Middle Row Specifics */
-      .pile-label { display: none; } /* Hide Text on Mobile */
-      .empty-label { display: none; } /* Hide Empty label */
+      .pile-label { display: none; }
+      .empty-label { display: none; }
       .deck-count-label { font-size: 10px; }
       .discard-container { width: 40px; height: 60px; }
       .side-bot { width: 30%; }
-      .center-table { width: 38%; padding: 6px 4px; gap: 4px; }
+      .center-table { width: 38%; padding: 8px 4px; }
+      .table-watermark { font-size: 9px; margin-bottom: 12px; }
     }
   </style>
 </head>
@@ -196,21 +198,24 @@
 
         <!-- Center Table -->
         <div class="center-table">
-          <div id="deck-area" class="center-col" onclick="inspectCards('deck')">
-            <div class="pile-label">Middle Deck</div>
-            <div id="deck-card" class="poker-card back"></div>
-            <div class="deck-count-label"><span id="deck-count" style="color: #fbc02d; font-weight:bold;">52</span> left</div>
-            <button id="drawBtn" onclick="event.stopPropagation(); drawCard();" disabled>Draw</button>
-          </div>
-
-          <div id="discard-area" class="center-col" onclick="inspectCards('discard')">
-            <div class="pile-label">Discard Pile</div>
-            <div class="discard-container" id="discard">
-              <span class="empty-label">Empty</span>
+          <div class="table-watermark">♠ KUA MERAH ♥</div>
+          
+          <div class="center-content-wrap">
+            <div id="deck-area" class="center-col" onclick="inspectCards('deck')">
+              <div class="pile-label">Middle Deck</div>
+              <div id="deck-card" class="poker-card back"></div>
+              <div class="deck-count-label"><span id="deck-count" style="color: #fbc02d; font-weight:bold;">52</span> left</div>
+              <button id="drawBtn" onclick="event.stopPropagation(); drawCard();" disabled>Draw</button>
             </div>
-            <!-- Invisible Spacer to perfectly align Draw and Take buttons horizontally -->
-            <div class="deck-count-label">&nbsp;</div> 
-            <button id="takeBtn" onclick="event.stopPropagation(); takeDiscard();" disabled>Take</button>
+
+            <div id="discard-area" class="center-col" onclick="inspectCards('discard')">
+              <div class="pile-label">Discard Pile</div>
+              <div class="discard-container" id="discard">
+                <span class="empty-label">Empty</span>
+              </div>
+              <div class="deck-count-label">&nbsp;</div> 
+              <button id="takeBtn" onclick="event.stopPropagation(); takeDiscard();" disabled>Take</button>
+            </div>
           </div>
         </div>
 
