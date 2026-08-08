@@ -47,7 +47,7 @@ function autoSortHand(hand) {
 }
 
 function checkFourPairs(hand) {
-  if (hand.length !== 8) return false;
+  if (!hand || hand.length !== 8) return false;
   let counts = {};
   for (let c of hand) counts[c.value] = (counts[c.value] || 0) + 1;
   let pairs = 0;
@@ -96,7 +96,8 @@ function getOrCreateRoom(roomCode, isSolo) {
       isDealing: false,
       roomTier: 10.00,
       players: [],
-      lastWinnerIdx: 0
+      lastWinnerIdx: 0,
+      pendingSteal: null
     };
   }
   return rooms[roomCode];
@@ -144,18 +145,27 @@ function checkForOutOfTurnInterception(room, discarderIdx, discardedCard) {
       return distA - distB;
     });
 
-    let winnerIdx = waitingWinners[0];
-    let stolenCard = room.discardPile.pop();
-    room.hands[winnerIdx].push(stolenCard);
-    autoSortHand(room.hands[winnerIdx]);
+    let targetWinner = waitingWinners[0];
 
-    io.to(room.roomCode).emit('animateCard', { source: 'discard', targetPlayer: winnerIdx, card: stolenCard });
-    room.actionLog = `⚡ ${room.playerNames[winnerIdx]} STOLE ${stolenCard.value}${stolenCard.suit} out of turn to WIN!`;
-    io.to(room.roomCode).emit('cardSound');
-    io.to(room.roomCode).emit('stateUpdate', room);
+    if (room.isHuman[targetWinner]) {
+      // Prompt real human player for decision
+      room.pendingSteal = { playerIdx: targetWinner, card: discardedCard };
+      io.to(room.roomCode).emit('promptSteal', { playerIdx: targetWinner, card: discardedCard, name: room.playerNames[discarderIdx] });
+      return true;
+    } else {
+      // Bot steals automatically
+      let stolenCard = room.discardPile.pop();
+      room.hands[targetWinner].push(stolenCard);
+      autoSortHand(room.hands[targetWinner]);
 
-    declareWin(room, winnerIdx, false);
-    return true;
+      io.to(room.roomCode).emit('animateCard', { source: 'discard', targetPlayer: targetWinner, card: stolenCard });
+      room.actionLog = `⚡ ${room.playerNames[targetWinner]} STOLE ${stolenCard.value}${stolenCard.suit} out of turn to WIN!`;
+      io.to(room.roomCode).emit('cardSound');
+      io.to(room.roomCode).emit('stateUpdate', room);
+
+      declareWin(room, targetWinner, false);
+      return true;
+    }
   }
 
   return false;
@@ -200,6 +210,7 @@ function startRoundLogic(room) {
   room.winner = null;
   room.gameEnded = false;
   room.revealStage = 0;
+  room.pendingSteal = null;
 
   let starterIdx = room.lastWinnerIdx;
   room.turn = starterIdx;
@@ -207,11 +218,9 @@ function startRoundLogic(room) {
   room.status = 'Shuffling & Dealing...';
 
   dealCardsOneByOne(room, starterIdx, () => {
-    if (checkFourPairs(room.hands[starterIdx])) {
-      if (!room.isHuman[starterIdx]) {
-        declareWin(room, starterIdx, true);
-        return;
-      }
+    if (checkFourPairs(room.hands[starterIdx]) && !room.isHuman[starterIdx]) {
+      declareWin(room, starterIdx, true);
+      return;
     }
 
     room.actionLog = `Cards dealt! ${room.playerNames[starterIdx]} starts first with 8 cards.`;
@@ -419,6 +428,30 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('respondSteal', (acceptSteal) => {
+    if (!currentRoom || !currentRoom.pendingSteal) return;
+    let stealData = currentRoom.pendingSteal;
+    currentRoom.pendingSteal = null;
+
+    if (acceptSteal) {
+      let stolenCard = currentRoom.discardPile.pop();
+      currentRoom.hands[stealData.playerIdx].push(stolenCard);
+      autoSortHand(currentRoom.hands[stealData.playerIdx]);
+
+      io.to(currentRoom.roomCode).emit('animateCard', { source: 'discard', targetPlayer: stealData.playerIdx, card: stolenCard });
+      currentRoom.actionLog = `⚡ ${currentRoom.playerNames[stealData.playerIdx]} STOLE ${stolenCard.value}${stolenCard.suit} to WIN!`;
+      io.to(currentRoom.roomCode).emit('cardSound');
+      io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
+
+      declareWin(currentRoom, stealData.playerIdx, false);
+    } else {
+      currentRoom.actionLog = `${currentRoom.playerNames[stealData.playerIdx]} passed on stealing. Game continues!`;
+      currentRoom.turn = (currentRoom.turn + 1) % 4;
+      io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
+      processTurn(currentRoom);
+    }
+  });
+
   socket.on('playerDraw', () => {
     if (!currentRoom) return;
     let pSeat = playerObj.seat;
@@ -479,7 +512,7 @@ io.on('connection', (socket) => {
 
     if (!intercepted) {
       currentRoom.turn = (currentRoom.turn + 1) % 4;
-      io.to(currentRoom.roomCode).emit('stateUpdate', room = currentRoom);
+      io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
       processTurn(currentRoom);
     }
   });

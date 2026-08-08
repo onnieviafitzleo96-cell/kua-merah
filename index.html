@@ -96,11 +96,11 @@
     }
 
     .flying-card {
-      position: fixed;
-      z-index: 3000;
+      position: fixed !important;
+      z-index: 5000 !important;
       pointer-events: none;
-      transition: all 0.65s cubic-bezier(0.16, 1, 0.3, 1);
-      box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+      transition: all 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.85);
     }
 
     .discard-container { position: relative; width: 58px; height: 84px; margin: 0 auto; }
@@ -190,6 +190,20 @@
       </div>
 
       <button onclick="enterGame()" style="width: 100%; padding: 12px; margin-top: 10px; font-size: 16px;">Enter Casino Room</button>
+    </div>
+  </div>
+
+  <!-- Steal Interception Modal -->
+  <div id="stealModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="border-color:#4caf50;">
+      <h2 style="color:#4caf50;">⚡ STEAL CARD TO WIN?</h2>
+      <p id="stealPromptText" style="font-size:14px;"></p>
+      <div id="stealCardPreview" style="margin: 15px 0;"></div>
+      <p style="font-size:12px; color:#ccc;">Stealing this card completes 4 pairs for you out of turn!</p>
+      <div style="display:flex; gap:10px; margin-top:15px;">
+        <button onclick="respondSteal(true)" style="flex:1; background:#2e7d32; color:white; padding:12px;">Yes, Steal & Win!</button>
+        <button onclick="respondSteal(false)" style="flex:1; background:#e53935; color:white; padding:12px;">Pass / Keep Playing</button>
+      </div>
     </div>
   </div>
 
@@ -336,28 +350,28 @@
       let srcRect = srcEl.getBoundingClientRect();
       let targetRect = targetEl.getBoundingClientRect();
 
-      let flyingCard = document.createElement('div');
+      let wrapper = document.createElement('div');
       
       if (data.card) {
-        flyingCard.innerHTML = renderPokerCardHtml(data.card);
-        flyingCard.firstChild.className += ' flying-card';
-        flyingCard = flyingCard.firstChild;
+        wrapper.innerHTML = renderPokerCardHtml(data.card);
+        wrapper = wrapper.firstElementChild;
+        wrapper.classList.add('flying-card');
       } else {
-        flyingCard.className = 'poker-card back flying-card';
+        wrapper.className = 'poker-card back flying-card';
       }
 
-      flyingCard.style.left = `${srcRect.left + 5}px`;
-      flyingCard.style.top = `${srcRect.top + 5}px`;
+      wrapper.style.left = `${srcRect.left + 5}px`;
+      wrapper.style.top = `${srcRect.top + 5}px`;
 
-      document.body.appendChild(flyingCard);
+      document.body.appendChild(wrapper);
 
       setTimeout(() => {
-        flyingCard.style.left = `${targetRect.left + targetRect.width / 2 - 20}px`;
-        flyingCard.style.top = `${targetRect.top + targetRect.height / 2 - 30}px`;
-        flyingCard.style.transform = 'scale(1.1) rotate(5deg)';
+        wrapper.style.left = `${targetRect.left + targetRect.width / 2 - 20}px`;
+        wrapper.style.top = `${targetRect.top + targetRect.height / 2 - 30}px`;
+        wrapper.style.transform = 'scale(1.1) rotate(6deg)';
       }, 30);
 
-      setTimeout(() => flyingCard.remove(), 650);
+      setTimeout(() => wrapper.remove(), 750);
     }
 
     function checkFourPairsFront(hand) {
@@ -451,6 +465,19 @@
       document.getElementById('watermarkLabel').innerText = isSoloMode ? '♠ SOLO ROOM ♥' : `♠ ROOM: ${data.roomCode} ♥`;
     });
 
+    socket.on('promptSteal', (data) => {
+      if (data.playerIdx === mySeat) {
+        document.getElementById('stealPromptText').innerText = `${data.name} discarded a card that completes your 4 pairs!`;
+        document.getElementById('stealCardPreview').innerHTML = renderPokerCardHtml(data.card);
+        document.getElementById('stealModal').style.display = 'flex';
+      }
+    });
+
+    function respondSteal(accept) {
+      document.getElementById('stealModal').style.display = 'none';
+      socket.emit('respondSteal', accept);
+    }
+
     function quitGame() {
       window.location.reload();
     }
@@ -525,7 +552,6 @@
         document.getElementById('startMatchBtn').style.display = 'none';
         document.getElementById('nextRoundBtn').style.display = 'none';
 
-        // Check if current human player holds 4 pairs to display Claim Win button option
         if (checkFourPairsFront(state.hands[mySeat])) {
           document.getElementById('claimWinBtn').style.display = 'inline-block';
         } else {
