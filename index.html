@@ -12,8 +12,7 @@
     .splash-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #05160a; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; transition: opacity 0.8s ease; }
     .splash-title { font-size: 38px; font-weight: 900; color: #fbc02d; text-shadow: 0 0 15px rgba(251, 192, 45, 0.6); letter-spacing: 2px; }
     .splash-cards { display: flex; gap: 10px; margin: 25px 0; }
-    .splash-card { width: 50px; height: 75px; background: white; border-radius: 6px; font-weight: bold; font-size: 22px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(255,255,255,0.4); animation: shuffle 1.2s infinite alternate ease-in-out; }
-    .splash-card.red { color: #d32f2f; }
+    .splash-card { width: 55px; height: 82px; background: white; border-radius: 6px; box-shadow: 0 0 15px rgba(255,255,255,0.4); animation: shuffle 1.2s infinite alternate ease-in-out; }
     @keyframes shuffle { 0% { transform: translateY(0) rotate(-5deg); } 100% { transform: translateY(-15px) rotate(5deg); } }
 
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.88); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 15px; }
@@ -29,31 +28,28 @@
 
     .casino-table { background: radial-gradient(circle, #124d26 0%, #082913 100%); border: 8px solid #3e2723; border-radius: 20px; padding: 15px; max-width: 900px; margin: 0 auto; box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 5px 20px rgba(0,0,0,0.7); }
     .table-layout { display: grid; grid-template-rows: auto auto auto; gap: 12px; position: relative; }
-    .bot-hand { background: rgba(0,0,0,0.3); padding: 8px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); min-height: 95px; }
+    .bot-hand { background: rgba(0,0,0,0.3); padding: 8px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); min-height: 110px; }
     .balance { font-size: 13px; font-weight: bold; color: #fbc02d; margin-top: 2px; }
 
     .action-banner { background: #fbc02d; color: #111; font-weight: bold; padding: 6px 14px; border-radius: 20px; display: inline-block; margin: 8px 0; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
 
+    /* Authentic SVG Playing Card Images */
     .poker-card {
       display: inline-block;
-      width: 46px;
-      height: 68px;
-      background: white;
-      color: #111;
-      border-radius: 5px;
+      width: 55px;
+      height: 82px;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      border-radius: 6px;
       margin: 2px;
       position: relative;
-      font-weight: bold;
-      box-shadow: 1px 2px 5px rgba(0,0,0,0.5);
+      box-shadow: 1px 2px 6px rgba(0,0,0,0.6);
       user-select: none;
       vertical-align: middle;
-      border: 1px solid #ccc;
+      border: 1px solid #ddd;
       transition: transform 0.2s ease;
     }
-    .poker-card.red { color: #d32f2f; }
-    .poker-card .rank-top { position: absolute; top: 2px; left: 4px; font-size: 11px; line-height: 10px; text-align: left; }
-    .poker-card .rank-top span { display: block; font-size: 9px; }
-    .poker-card .center-suit { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 20px; }
     
     .poker-card.back {
       background-color: #b71c1c;
@@ -65,8 +61,8 @@
     }
 
     .flying-card { position: fixed; z-index: 999; pointer-events: none; transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1); }
-    .discard-container { position: relative; width: 80px; height: 80px; margin: 0 auto; }
-    .discard-container .poker-card { position: absolute; top: 0; left: 15px; }
+    .discard-container { position: relative; width: 80px; height: 90px; margin: 0 auto; }
+    .discard-container .poker-card { position: absolute; top: 0; left: 12px; }
 
     .inspectable { cursor: pointer; border: 2px dashed #fbc02d; padding: 4px; border-radius: 8px; animation: pulse 1.5s infinite; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(251, 192, 45, 0.7); } 70% { box-shadow: 0 0 0 8px rgba(251, 192, 45, 0); } 100% { box-shadow: 0 0 0 0 rgba(251, 192, 45, 0); } }
@@ -77,9 +73,7 @@
     .quit-btn { background: #e53935; color: white; margin-left: 8px; }
 
     @media (max-width: 600px) {
-      .poker-card { width: 38px; height: 58px; margin: 1px; }
-      .poker-card .rank-top { font-size: 10px; top: 1px; left: 2px; }
-      .poker-card .center-suit { font-size: 16px; }
+      .poker-card { width: 40px; height: 60px; margin: 1px; }
       .casino-table { padding: 8px; border-width: 4px; }
       .splash-title { font-size: 28px; }
       button { padding: 7px 12px; font-size: 12px; }
@@ -89,19 +83,19 @@
 </head>
 <body>
 
-  <!-- Splash Screen Animation -->
+  <!-- Splash Screen -->
   <div id="splashScreen" class="splash-overlay">
     <div class="splash-title">KUA MERAH</div>
     <div style="font-size:14px; color:#aaa; margin-top:5px;">Traditional Card Game</div>
     <div class="splash-cards">
-      <div class="splash-card red">K♥</div>
-      <div class="splash-card">10♠</div>
-      <div class="splash-card red">A♦</div>
+      <div class="splash-card" style="background-image: url('https://upload.wikimedia.org/wikipedia/commons/7/79/English_pattern_king_of_hearts.svg'); background-size: cover;"></div>
+      <div class="splash-card" style="background-image: url('https://upload.wikimedia.org/wikipedia/commons/d/da/English_pattern_10_of_spades.svg'); background-size: cover;"></div>
+      <div class="splash-card" style="background-image: url('https://upload.wikimedia.org/wikipedia/commons/d/d3/English_pattern_ace_of_diamonds.svg'); background-size: cover;"></div>
     </div>
-    <div style="font-size:12px; color:#fbc02d;">Shuffling Room Decks...</div>
+    <div style="font-size:12px; color:#fbc02d;">Loading Real Playing Cards...</div>
   </div>
 
-  <!-- Entry / Room Selection Modal -->
+  <!-- Entry Modal -->
   <div id="startModal" class="modal-overlay">
     <div class="modal-box">
       <h2>Welcome Player!</h2>
@@ -193,6 +187,60 @@
     const socket = io();
     let currentGameState = null;
     let selectedTier = 10;
+
+    // Standard High-Res Wikimedia Playing Card Vector Mapping
+    function getCardSvgUrl(card) {
+      const suitMap = { '♠': 'spades', '♥': 'hearts', '♦': 'diamonds', '♣': 'clubs' };
+      const valueMap = {
+        'A': 'ace', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6',
+        '7': '7', '8': '8', '9': '9', '10': '10', 'J': 'jack', 'Q': 'queen', 'K': 'king'
+      };
+
+      let v = valueMap[card.value];
+      let s = suitMap[card.suit];
+
+      // Standard English pattern vector links
+      const svgLinks = {
+        'ace_spades': 'https://upload.wikimedia.org/wikipedia/commons/2/25/English_pattern_ace_of_spades.svg',
+        'ace_hearts': 'https://upload.wikimedia.org/wikipedia/commons/d/d4/English_pattern_ace_of_hearts.svg',
+        'ace_diamonds': 'https://upload.wikimedia.org/wikipedia/commons/d/d3/English_pattern_ace_of_diamonds.svg',
+        'ace_clubs': 'https://upload.wikimedia.org/wikipedia/commons/5/5f/English_pattern_ace_of_clubs.svg',
+        'jack_spades': 'https://upload.wikimedia.org/wikipedia/commons/4/4f/English_pattern_jack_of_spades.svg',
+        'jack_hearts': 'https://upload.wikimedia.org/wikipedia/commons/2/22/English_pattern_jack_of_hearts.svg',
+        'jack_diamonds': 'https://upload.wikimedia.org/wikipedia/commons/1/16/English_pattern_jack_of_diamonds.svg',
+        'jack_clubs': 'https://upload.wikimedia.org/wikipedia/commons/2/2f/English_pattern_jack_of_clubs.svg',
+        'queen_spades': 'https://upload.wikimedia.org/wikipedia/commons/c/ca/English_pattern_queen_of_spades.svg',
+        'queen_hearts': 'https://upload.wikimedia.org/wikipedia/commons/7/72/English_pattern_queen_of_hearts.svg',
+        'queen_diamonds': 'https://upload.wikimedia.org/wikipedia/commons/4/4e/English_pattern_queen_of_diamonds.svg',
+        'queen_clubs': 'https://upload.wikimedia.org/wikipedia/commons/1/12/English_pattern_queen_of_clubs.svg',
+        'king_spades': 'https://upload.wikimedia.org/wikipedia/commons/f/f1/English_pattern_king_of_spades.svg',
+        'king_hearts': 'https://upload.wikimedia.org/wikipedia/commons/7/79/English_pattern_king_of_hearts.svg',
+        'king_diamonds': 'https://upload.wikimedia.org/wikipedia/commons/1/1c/English_pattern_king_of_diamonds.svg',
+        'king_clubs': 'https://upload.wikimedia.org/wikipedia/commons/2/28/English_pattern_king_of_clubs.svg'
+      };
+
+      let key = `${v}_${s}`;
+      if (svgLinks[key]) return svgLinks[key];
+
+      // Number cards (2 to 10)
+      return `https://upload.wikimedia.org/wikipedia/commons/thumb/${getHash(v, s)}/English_pattern_${v}_of_${s}.svg/240px-English_pattern_${v}_of_${s}.svg.png`;
+    }
+
+    // Helper to fetch vector images for number cards
+    function getHash(v, s) {
+      const hashes = {
+        '2_spades': '0/0b', '2_hearts': 'a/a2', '2_diamonds': 'e/e8', '2_clubs': '3/30',
+        '3_spades': 'a/a5', '3_hearts': 'b/b6', '3_diamonds': 'd/dc', '3_clubs': '1/14',
+        '4_spades': '4/4c', '4_hearts': 'a/a2', '4_diamonds': 'a/a6', '4_clubs': '2/2c',
+        '5_spades': 'd/dc', '5_hearts': '5/52', '5_diamonds': '6/6c', '5_clubs': '6/68',
+        '6_spades': '4/4e', '6_hearts': 'c/cd', '6_diamonds': '4/48', '6_clubs': 'a/a0',
+        '7_spades': 'f/fd', '7_hearts': '9/94', '7_diamonds': 'e/e6', '7_clubs': '4/4b',
+        '8_spades': '2/2c', '8_hearts': '5/50', '8_diamonds': '7/78', '8_clubs': 'e/eb',
+        '9_spades': 'e/e0', '9_hearts': '5/50', '9_diamonds': '9/9e', '9_clubs': '2/27',
+        '10_spades': 'd/da', '10_hearts': 'c/c3', '10_diamonds': 'a/ae', '10_clubs': '3/3d'
+      };
+      return hashes[`${v}_${s}`] || '0/0b';
+    }
 
     setTimeout(() => {
       let splash = document.getElementById('splashScreen');
@@ -310,13 +358,12 @@
     function discard(idx) { socket.emit('discardCard', idx); }
 
     function renderPokerCard(card, isClickable = false, index = 0, customRotation = 0) {
-      let colorClass = card.isRed ? 'poker-card red' : 'poker-card';
+      let imgUrl = getCardSvgUrl(card);
       let clickAttr = isClickable ? `onclick="discard(${index})"` : '';
       let rotStyle = customRotation !== 0 ? `transform: rotate(${customRotation}deg);` : '';
+
       return `
-        <div class="${colorClass}" ${clickAttr} style="${rotStyle} ${isClickable ? 'cursor:pointer; transform: translateY(-4px); border: 2px solid #fbc02d;' : ''}">
-          <div class="rank-top">${card.value}<span>${card.suit}</span></div>
-          <div class="center-suit">${card.suit}</div>
+        <div class="poker-card" ${clickAttr} style="background-image: url('${imgUrl}'); ${rotStyle} ${isClickable ? 'cursor:pointer; transform: translateY(-6px); border: 2px solid #fbc02d; box-shadow: 0 0 10px #fbc02d;' : ''}">
         </div>
       `;
     }
