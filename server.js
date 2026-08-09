@@ -211,7 +211,7 @@ function startRoundLogic(room) {
   let starterIdx = room.lastWinnerIdx;
   room.turn = starterIdx;
   room.actionLog = `$${room.roomTier} Room - ${room.playerNames[starterIdx]} starts first!`;
-  room.status = 'Shuffling & Dealing...';
+  room.status = `Turn: ${room.playerNames[starterIdx]}`;
 
   dealCardsOneByOne(room, starterIdx, () => {
     if (checkFourPairs(room.hands[starterIdx]) && !room.isHuman[starterIdx]) {
@@ -220,11 +220,10 @@ function startRoundLogic(room) {
     }
 
     room.actionLog = `Cards dealt! ${room.playerNames[starterIdx]} starts first with 8 cards.`;
-    
-    if (room.isHuman[starterIdx]) {
-      room.status = `Turn: ${room.playerNames[starterIdx]} (Discard 1 card to kickstart)`;
-      io.to(room.roomCode).emit('stateUpdate', room);
-    } else {
+    room.status = `Turn: ${room.playerNames[starterIdx]}`;
+    io.to(room.roomCode).emit('stateUpdate', room);
+
+    if (!room.isHuman[starterIdx]) {
       runBotTurn(room, true);
     }
   });
@@ -235,14 +234,13 @@ function processTurn(room) {
 
   let currentTurnSeat = room.turn;
   room.takeCooldown[currentTurnSeat] = null;
+  room.status = `Turn: ${room.playerNames[currentTurnSeat]}`;
+  io.to(room.roomCode).emit('stateUpdate', room);
 
   let isHumanTurn = room.isHuman[currentTurnSeat];
 
   if (!isHumanTurn) {
     runBotTurn(room, false);
-  } else {
-    room.status = `Turn: ${room.playerNames[currentTurnSeat]}`;
-    io.to(room.roomCode).emit('stateUpdate', room);
   }
 }
 
@@ -277,7 +275,6 @@ function runBotTurn(room, isInitialDiscard = false) {
           return;
         }
 
-        // Smart Bot Logic: Check if bot is aiming for face-card special win
         let faceCount = botHand.filter(c => ['J','Q','K'].includes(c.value)).length;
         let isAimingForCourtWin = faceCount >= 5;
 
@@ -325,7 +322,6 @@ function runBotTurn(room, isInitialDiscard = false) {
     setTimeout(() => {
       if (room.gameEnded) return;
 
-      // Smart Discard Selection: Prioritize throwing LOW-POINT SINGLETONS first!
       let singletons = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 1);
       
       let faceCount = botHand.filter(c => ['J','Q','K'].includes(c.value)).length;
@@ -334,12 +330,10 @@ function runBotTurn(room, isInitialDiscard = false) {
       let cardToDiscard = null;
 
       if (singletons.length > 0) {
-        // Sort singletons by points ascending (Aces=1pt, J/Q/K=2pts thrown first unless going for special court win)
         singletons.sort((a, b) => {
           if (!isAimingForCourtWin) {
-            return a.points - b.points; // Discard lowest points (Aces, low black cards) first!
+            return a.points - b.points;
           } else {
-            // Keep court cards if aiming for court win, throw low number cards first
             let isFaceA = ['J','Q','K'].includes(a.value) ? 1 : 0;
             let isFaceB = ['J','Q','K'].includes(b.value) ? 1 : 0;
             if (isFaceA !== isFaceB) return isFaceA - isFaceB;
@@ -348,7 +342,6 @@ function runBotTurn(room, isInitialDiscard = false) {
         });
         cardToDiscard = singletons[0];
       } else {
-        // If holding 3 of a kind, throw 1 to break down to pair
         let triplets = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 3);
         if (triplets.length > 0) {
           cardToDiscard = triplets[0];
@@ -372,7 +365,6 @@ function runBotTurn(room, isInitialDiscard = false) {
       if (!intercepted) {
         room.turn = (room.turn + 1) % 4;
         setTimeout(() => {
-          io.to(room.roomCode).emit('stateUpdate', room);
           processTurn(room);
         }, 600);
       }
@@ -476,7 +468,6 @@ io.on('connection', (socket) => {
     } else {
       currentRoom.actionLog = `${currentRoom.playerNames[stealData.playerIdx]} passed on stealing. Game continues!`;
       currentRoom.turn = (currentRoom.turn + 1) % 4;
-      io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
       processTurn(currentRoom);
     }
   });
@@ -528,9 +519,9 @@ io.on('connection', (socket) => {
     
     let cardToDiscard = currentRoom.hands[pSeat][cardIndex];
 
+    // PRIVATE WARNING: Only alert the individual player who broke the bluff cooldown rule!
     if (currentRoom.takeCooldown[pSeat] === cardToDiscard.value) {
-      currentRoom.actionLog = `❌ Cooldown Rule: You took rank ${cardToDiscard.value} from DISCARD! You cannot discard rank ${cardToDiscard.value} on the same turn.`;
-      io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
+      socket.emit('privateRuleAlert', `❌ Cooldown Rule: You took rank ${cardToDiscard.value} from DISCARD! You cannot discard rank ${cardToDiscard.value} on the same turn.`);
       return;
     }
 
@@ -547,7 +538,6 @@ io.on('connection', (socket) => {
     if (!intercepted) {
       currentRoom.turn = (currentRoom.turn + 1) % 4;
       setTimeout(() => {
-        io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
         processTurn(currentRoom);
       }, 600);
     }

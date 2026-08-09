@@ -193,6 +193,15 @@
     </div>
   </div>
 
+  <!-- Private Rule Alert Modal -->
+  <div id="ruleAlertModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="border-color:#e53935;">
+      <h2 style="color:#e53935;">⚠️ Illegal Move</h2>
+      <p id="ruleAlertText" style="font-size:14px; margin:15px 0; color:white;"></p>
+      <button onclick="closeRuleAlert()" style="background:#e53935; color:white; width:100%; padding:10px;">Got It</button>
+    </div>
+  </div>
+
   <!-- Steal Interception Modal -->
   <div id="stealModal" class="modal-overlay" style="display:none;">
     <div class="modal-box" style="border-color:#4caf50;">
@@ -352,7 +361,6 @@
 
       let wrapper = document.createElement('div');
       
-      // Keep card face-down if drawing from deck, or show face-up if taken from discard
       if (data.card && !data.isPrivate) {
         wrapper.innerHTML = renderPokerCardHtml(data.card);
         wrapper = wrapper.firstElementChild;
@@ -466,6 +474,15 @@
       document.getElementById('watermarkLabel').innerText = isSoloMode ? '♠ SOLO ROOM ♥' : `♠ ROOM: ${data.roomCode} ♥`;
     });
 
+    socket.on('privateRuleAlert', (msg) => {
+      document.getElementById('ruleAlertText').innerText = msg;
+      document.getElementById('ruleAlertModal').style.display = 'flex';
+    });
+
+    function closeRuleAlert() {
+      document.getElementById('ruleAlertModal').style.display = 'none';
+    }
+
     socket.on('promptSteal', (data) => {
       if (data.playerIdx === mySeat) {
         document.getElementById('stealPromptText').innerText = `${data.name} discarded a card that completes your 4 pairs!`;
@@ -560,6 +577,7 @@
         }
       }
 
+      // Dynamic seats & name rendering relative to current user
       for (let sIdx = 0; sIdx < 4; sIdx++) {
         let domIdx = mapSeatToDomIndex(sIdx);
         document.getElementById(`name-${domIdx}`).innerText = state.playerNames[sIdx];
@@ -571,8 +589,6 @@
       let isMyTurn = (state.turn === mySeat && !state.gameEnded && !state.isDealing);
       let myHandLen = state.hands[mySeat] ? state.hands[mySeat].length : 0;
       document.getElementById('drawBtn').disabled = !(isMyTurn && myHandLen === 7);
-
-      // Allow human players to freely take discard cards
       document.getElementById('takeBtn').disabled = !(isMyTurn && myHandLen === 7 && state.discardPile.length > 0);
 
       let myDiv = document.getElementById('hand-0');
