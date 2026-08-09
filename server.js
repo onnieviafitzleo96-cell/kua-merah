@@ -95,7 +95,7 @@ function getOrCreateRoom(roomCode, isSolo) {
       players: [],
       lastWinnerIdx: 0,
       pendingSteal: null,
-      takeCooldown: [null, null, null, null] // Tracks rank taken from discard on current turn
+      takeCooldown: [null, null, null, null]
     };
   }
   return rooms[roomCode];
@@ -234,7 +234,7 @@ function processTurn(room) {
   if (room.gameEnded) return;
 
   let currentTurnSeat = room.turn;
-  room.takeCooldown[currentTurnSeat] = null; // Reset cooldown for active player turn
+  room.takeCooldown[currentTurnSeat] = null;
 
   let isHumanTurn = room.isHuman[currentTurnSeat];
 
@@ -277,12 +277,16 @@ function runBotTurn(room, isInitialDiscard = false) {
           return;
         }
 
+        // Smart Bot Logic: Check if bot is aiming for face-card special win
+        let faceCount = botHand.filter(c => ['J','Q','K'].includes(c.value)).length;
+        let isAimingForCourtWin = faceCount >= 5;
+
         let hasSingleMatchingCard = botHand.some(c => {
           let count = botHand.filter(x => x.value === c.value).length;
           return c.value === topDiscard.value && count === 1;
         });
 
-        if (hasSingleMatchingCard) {
+        if (hasSingleMatchingCard && (topDiscard.points >= 5 || ['J','Q','K'].includes(topDiscard.value) && isAimingForCourtWin)) {
           let c = room.discardPile.pop();
           botHand.push(c);
           autoSortHand(botHand);
@@ -305,7 +309,6 @@ function runBotTurn(room, isInitialDiscard = false) {
         botHand.push(drawnCard);
         autoSortHand(botHand);
 
-        // Broadcast face-down draw for bots so human players don't see bot drew cards
         io.to(room.roomCode).emit('animateCard', { source: 'deck', targetPlayer: currentBot, card: null, isPrivate: true });
         room.actionLog = `📥 ${room.playerNames[currentBot]} drew from MIDDLE DECK.`;
         io.to(room.roomCode).emit('cardSound');
@@ -322,15 +325,39 @@ function runBotTurn(room, isInitialDiscard = false) {
     setTimeout(() => {
       if (room.gameEnded) return;
 
-      let discardIndex = 0;
-      for (let i = 0; i < botHand.length; i++) {
-        let count = botHand.filter(c => c.value === botHand[i].value).length;
-        if (count === 1 || count === 3) {
-          discardIndex = i;
-          break;
+      // Smart Discard Selection: Prioritize throwing LOW-POINT SINGLETONS first!
+      let singletons = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 1);
+      
+      let faceCount = botHand.filter(c => ['J','Q','K'].includes(c.value)).length;
+      let isAimingForCourtWin = faceCount >= 6;
+
+      let cardToDiscard = null;
+
+      if (singletons.length > 0) {
+        // Sort singletons by points ascending (Aces=1pt, J/Q/K=2pts thrown first unless going for special court win)
+        singletons.sort((a, b) => {
+          if (!isAimingForCourtWin) {
+            return a.points - b.points; // Discard lowest points (Aces, low black cards) first!
+          } else {
+            // Keep court cards if aiming for court win, throw low number cards first
+            let isFaceA = ['J','Q','K'].includes(a.value) ? 1 : 0;
+            let isFaceB = ['J','Q','K'].includes(b.value) ? 1 : 0;
+            if (isFaceA !== isFaceB) return isFaceA - isFaceB;
+            return a.points - b.points;
+          }
+        });
+        cardToDiscard = singletons[0];
+      } else {
+        // If holding 3 of a kind, throw 1 to break down to pair
+        let triplets = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 3);
+        if (triplets.length > 0) {
+          cardToDiscard = triplets[0];
+        } else {
+          cardToDiscard = botHand[0];
         }
       }
 
+      let discardIndex = botHand.findIndex(c => c.id === cardToDiscard.id);
       let card = botHand.splice(discardIndex, 1)[0];
       room.discardPile.push(card);
       autoSortHand(botHand);
@@ -464,7 +491,8 @@ io.on('connection', (socket) => {
       currentRoom.hands[pSeat].push(c);
       autoSortHand(currentRoom.hands[pSeat]);
 
-      // Face-down private draw animation for middle deck
+      currentRoom.takeCooldown[pSeat] = null;
+
       io.to(currentRoom.roomCode).emit('animateCard', { source: 'deck', targetPlayer: pSeat, card: null, isPrivate: true });
       currentRoom.actionLog = `📥 ${playerObj.name} drew from MIDDLE DECK.`;
       io.to(currentRoom.roomCode).emit('cardSound');
@@ -484,7 +512,6 @@ io.on('connection', (socket) => {
     currentRoom.hands[pSeat].push(c);
     autoSortHand(currentRoom.hands[pSeat]);
 
-    // Set 1-round cooldown on this taken rank
     currentRoom.takeCooldown[pSeat] = c.value;
 
     io.to(currentRoom.roomCode).emit('animateCard', { source: 'discard', targetPlayer: pSeat, card: c, isPrivate: false });
@@ -501,9 +528,8 @@ io.on('connection', (socket) => {
     
     let cardToDiscard = currentRoom.hands[pSeat][cardIndex];
 
-    // Enforce 1-Round Bluff Cooldown Rule
     if (currentRoom.takeCooldown[pSeat] === cardToDiscard.value) {
-      currentRoom.actionLog = `❌ Bluff Rule: You cannot discard rank ${cardToDiscard.value} on the same turn you took it! Wait 1 round.`;
+      currentRoom.actionLog = `❌ Cooldown Rule: You took rank ${cardToDiscard.value} from DISCARD! You cannot discard rank ${cardToDiscard.value} on the same turn.`;
       io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom);
       return;
     }
