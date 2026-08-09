@@ -99,7 +99,7 @@
       position: fixed !important;
       z-index: 5000 !important;
       pointer-events: none;
-      transition: all 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: all 0.65s cubic-bezier(0.16, 1, 0.3, 1);
       box-shadow: 0 12px 30px rgba(0,0,0,0.85);
     }
 
@@ -352,7 +352,8 @@
 
       let wrapper = document.createElement('div');
       
-      if (data.card) {
+      // Keep card face-down if drawing from deck, or show face-up if taken from discard
+      if (data.card && !data.isPrivate) {
         wrapper.innerHTML = renderPokerCardHtml(data.card);
         wrapper = wrapper.firstElementChild;
         wrapper.classList.add('flying-card');
@@ -371,7 +372,7 @@
         wrapper.style.transform = 'scale(1.1) rotate(6deg)';
       }, 30);
 
-      setTimeout(() => wrapper.remove(), 750);
+      setTimeout(() => wrapper.remove(), 650);
     }
 
     function checkFourPairsFront(hand) {
@@ -571,11 +572,8 @@
       let myHandLen = state.hands[mySeat] ? state.hands[mySeat].length : 0;
       document.getElementById('drawBtn').disabled = !(isMyTurn && myHandLen === 7);
 
-      let topDiscard = state.discardPile.length > 0 ? state.discardPile[state.discardPile.length - 1] : null;
-      let countInMyHand = (topDiscard && state.hands[mySeat]) ? state.hands[mySeat].filter(c => c.value === topDiscard.value).length : 0;
-      let isCheatingAttempt = countInMyHand >= 2;
-
-      document.getElementById('takeBtn').disabled = !(isMyTurn && myHandLen === 7 && state.discardPile.length > 0 && !isCheatingAttempt);
+      // Allow human players to freely take discard cards
+      document.getElementById('takeBtn').disabled = !(isMyTurn && myHandLen === 7 && state.discardPile.length > 0);
 
       let myDiv = document.getElementById('hand-0');
       myDiv.innerHTML = '';
