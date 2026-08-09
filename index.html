@@ -364,7 +364,6 @@
     let roomAction = 'create';
     let myPersistentBalance = 10.00;
 
-    // Load saved data from localStorage on startup
     window.addEventListener('DOMContentLoaded', () => {
       let savedName = localStorage.getItem('kua_merah_name');
       let savedBal = localStorage.getItem('kua_merah_balance');
@@ -554,10 +553,16 @@
     function enterGame() {
       let tierVal = parseFloat(document.getElementById('roomTierSelect').value);
 
-      if (myPersistentBalance < tierVal) {
-        document.getElementById('ruleAlertText').innerText = `Insufficient balance! You hold $${myPersistentBalance.toFixed(2)}, but this room tier requires $${tierVal.toFixed(2)}.`;
+      if (tierVal > 10 && myPersistentBalance < tierVal) {
+        document.getElementById('ruleAlertText').innerText = `Insufficient balance! You hold $${myPersistentBalance.toFixed(2)}, but the $${tierVal} room tier requires at least $${tierVal.toFixed(2)}.`;
         document.getElementById('ruleAlertModal').style.display = 'flex';
         return;
+      }
+
+      if (myPersistentBalance <= 0) {
+        myPersistentBalance = 10.00;
+        localStorage.setItem('kua_merah_balance', 10.00);
+        document.getElementById('welcomeBalanceText').innerText = '$10.00';
       }
 
       selectedTier = tierVal;
@@ -575,6 +580,8 @@
       
       if (isSoloMode) {
         document.getElementById('startMatchBtn').style.display = 'none';
+      } else {
+        document.getElementById('startMatchBtn').style.display = 'inline-block';
       }
     }
 
