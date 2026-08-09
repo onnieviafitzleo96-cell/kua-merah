@@ -251,7 +251,7 @@ function runBotTurn(room, isInitialDiscard = false) {
   let botHand = room.hands[currentBot];
 
   setTimeout(() => {
-    if (room.gameEnded) return;
+    if (room.gameEnded || room.turn !== currentBot) return;
 
     let tookDiscard = false;
 
@@ -286,7 +286,7 @@ function runBotTurn(room, isInitialDiscard = false) {
         }
         let drawnCard = room.deck.pop();
         botHand.push(drawnCard);
-        autoSortHand(room.hands[drawnCard]);
+        autoSortHand(botHand);
 
         io.to(room.roomCode).emit('animateCard', { source: 'deck', targetPlayer: currentBot, card: null, isPrivate: true });
         room.actionLog = `📥 ${room.playerNames[currentBot]} drew from MIDDLE DECK.`;
@@ -302,7 +302,7 @@ function runBotTurn(room, isInitialDiscard = false) {
     }
 
     setTimeout(() => {
-      if (room.gameEnded) return;
+      if (room.gameEnded || room.turn !== currentBot) return;
 
       let singletons = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 1);
       let triplets = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 3);
@@ -334,11 +334,11 @@ function runBotTurn(room, isInitialDiscard = false) {
         room.turn = (room.turn + 1) % 4;
         setTimeout(() => {
           processTurn(room);
-        }, 600);
+        }, 700);
       }
-    }, 2000);
+    }, 1800);
 
-  }, isInitialDiscard ? 1200 : 2000);
+  }, isInitialDiscard ? 1000 : 1500);
 }
 
 function declareWin(room, playerIdx, isInstantWin) {
@@ -356,7 +356,6 @@ function declareWin(room, playerIdx, isInstantWin) {
       room.balances[i] += totalWinnings;
     } else {
       room.balances[i] -= perPlayerCost;
-      // Reset only if balance drops to/below zero
       if (room.balances[i] <= 0) {
         room.balances[i] = 10.00;
       }
@@ -395,7 +394,6 @@ io.on('connection', (socket) => {
     currentRoom.players.push(playerObj);
     updateRoomRoster(currentRoom);
 
-    // Apply persistent balance if valid and non-zero
     if (currentBalance !== undefined && currentBalance > 0) {
       currentRoom.balances[playerObj.seat] = currentBalance;
     }
@@ -524,7 +522,7 @@ io.on('connection', (socket) => {
       currentRoom.turn = (currentRoom.turn + 1) % 4;
       setTimeout(() => {
         processTurn(currentRoom);
-      }, 600);
+      }, 700);
     }
   });
 
