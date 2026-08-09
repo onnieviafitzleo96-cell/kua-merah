@@ -33,7 +33,6 @@
     .rules-btn { width: 100%; padding: 10px; background: rgba(251, 192, 45, 0.2); border: 1.5px dashed #fbc02d; color: #fbc02d; font-weight: bold; border-radius: 8px; margin-bottom: 15px; cursor: pointer; }
     .rules-btn:hover { background: rgba(251, 192, 45, 0.35); }
 
-    /* Rules text styling */
     .rules-content { font-size: 13px; line-height: 1.5; color: #e0e0e0; }
     .rules-content ul { padding-left: 18px; margin: 6px 0; }
     .rules-content li { margin-bottom: 6px; }
@@ -137,6 +136,8 @@
       .casino-table { padding: 6px; border-width: 4px; }
       .splash-title { font-size: 28px; }
       button { padding: 6px 10px; font-size: 11px; margin: 2px; }
+      .tier-grid { grid-template-columns: repeat(2, 1fr); }
+      
       .pile-label { display: none; }
       .empty-label { display: none; }
       .deck-count-label { font-size: 10px; }
@@ -178,8 +179,11 @@
         <button id="friendsModeBtn" class="mode-btn" onclick="setPlayMode(false)">Play with Friends</button>
       </div>
 
-      <p style="font-size:13px; margin-bottom: 5px;">Enter Your Nickname:</p>
-      <input type="text" id="playerNameInput" class="name-input" placeholder="Enter Your Name" value="Player 1" maxlength="15">
+      <p style="font-size:13px; margin-bottom: 5px;">Your Nickname:</p>
+      <div id="profileContainer" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <input type="text" id="playerNameInput" class="name-input" placeholder="Enter Your Name" value="Player 1" maxlength="15" style="margin-bottom:0; flex:1;">
+        <button id="editNameBtn" onclick="enableNameEdit()" style="padding: 10px 14px; background: #333; color: #fbc02d; border: 1px solid #fbc02d; border-radius: 8px; display:none;">Edit</button>
+      </div>
 
       <div id="roomCodeContainer" style="display:none; margin-top:10px;">
         <div style="display: flex; gap: 8px; margin-bottom: 10px;">
@@ -360,6 +364,43 @@
     let roomAction = 'create';
     let myPersistentBalance = 10.00;
 
+    // Load saved data from localStorage on startup
+    window.addEventListener('DOMContentLoaded', () => {
+      let savedName = localStorage.getItem('kua_merah_name');
+      let savedBal = localStorage.getItem('kua_merah_balance');
+
+      if (savedName) {
+        let nameInput = document.getElementById('playerNameInput');
+        nameInput.value = savedName;
+        nameInput.disabled = true;
+        document.getElementById('editNameBtn').style.display = 'inline-block';
+      }
+
+      if (savedBal) {
+        myPersistentBalance = parseFloat(savedBal);
+        document.getElementById('welcomeBalanceText').innerText = `$${myPersistentBalance.toFixed(2)}`;
+      }
+    });
+
+    function enableNameEdit() {
+      let nameInput = document.getElementById('playerNameInput');
+      nameInput.disabled = false;
+      nameInput.focus();
+      document.getElementById('editNameBtn').innerText = 'Save';
+      document.getElementById('editNameBtn').setAttribute('onclick', 'saveNameEdit()');
+    }
+
+    function saveNameEdit() {
+      let nameInput = document.getElementById('playerNameInput');
+      if (nameInput.value.trim() !== '') {
+        localStorage.setItem('kua_merah_name', nameInput.value.trim());
+      }
+      nameInput.disabled = true;
+      let editBtn = document.getElementById('editNameBtn');
+      editBtn.innerText = 'Edit';
+      editBtn.setAttribute('onclick', 'enableNameEdit()');
+    }
+
     setTimeout(() => {
       let splash = document.getElementById('splashScreen');
       splash.style.opacity = '0';
@@ -520,7 +561,11 @@
       }
 
       selectedTier = tierVal;
-      let customName = document.getElementById('playerNameInput').value;
+      let customName = document.getElementById('playerNameInput').value.trim();
+      if (customName) {
+        localStorage.setItem('kua_merah_name', customName);
+      }
+
       let roomCode = document.getElementById('roomCodeInput').value;
 
       socket.emit('joinRoom', { name: customName, roomCode: roomCode, isSolo: isSoloMode, currentBalance: myPersistentBalance });
@@ -530,8 +575,6 @@
       
       if (isSoloMode) {
         document.getElementById('startMatchBtn').style.display = 'none';
-      } else {
-        document.getElementById('startMatchBtn').style.display = 'inline-block';
       }
     }
 
@@ -624,9 +667,9 @@
       document.getElementById('actionLog').innerText = state.actionLog;
       document.getElementById('deck-count').innerText = state.deck.length;
 
-      // Track persistent human balance
       if (state.balances && state.balances[mySeat] !== undefined) {
         myPersistentBalance = state.balances[mySeat];
+        localStorage.setItem('kua_merah_balance', myPersistentBalance);
         document.getElementById('welcomeBalanceText').innerText = `$${myPersistentBalance.toFixed(2)}`;
       }
 
