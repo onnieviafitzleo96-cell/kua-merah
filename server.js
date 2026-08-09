@@ -255,35 +255,14 @@ function runBotTurn(room, isInitialDiscard = false) {
 
     let tookDiscard = false;
 
+    // RULE: Bot MUST take from discard pile if it holds AT LEAST 1 matching card!
     if (!isInitialDiscard && botHand.length === 7) {
       if (room.discardPile.length > 0) {
         let topDiscard = room.discardPile[room.discardPile.length - 1];
-        let testHand = [...botHand, topDiscard];
 
-        if (checkFourPairs(testHand)) {
-          let c = room.discardPile.pop();
-          botHand.push(c);
-          autoSortHand(botHand);
-          tookDiscard = true;
+        let hasMatchingCardInHand = botHand.some(c => c.value === topDiscard.value);
 
-          io.to(room.roomCode).emit('animateCard', { source: 'discard', targetPlayer: currentBot, card: c, isPrivate: false });
-          room.actionLog = `🎴 ${room.playerNames[currentBot]} took ${c.value}${c.suit} from DISCARD to WIN!`;
-          io.to(room.roomCode).emit('cardSound');
-
-          setTimeout(() => io.to(room.roomCode).emit('stateUpdate', room), 600);
-          setTimeout(() => declareWin(room, currentBot, false), 1800);
-          return;
-        }
-
-        let faceCount = botHand.filter(c => ['J','Q','K'].includes(c.value)).length;
-        let isAimingForCourtWin = faceCount >= 5;
-
-        let hasSingleMatchingCard = botHand.some(c => {
-          let count = botHand.filter(x => x.value === c.value).length;
-          return c.value === topDiscard.value && count === 1;
-        });
-
-        if (hasSingleMatchingCard && (topDiscard.points >= 5 || ['J','Q','K'].includes(topDiscard.value) && isAimingForCourtWin)) {
+        if (hasMatchingCardInHand) {
           let c = room.discardPile.pop();
           botHand.push(c);
           autoSortHand(botHand);
@@ -294,6 +273,11 @@ function runBotTurn(room, isInitialDiscard = false) {
           io.to(room.roomCode).emit('cardSound');
           
           setTimeout(() => io.to(room.roomCode).emit('stateUpdate', room), 600);
+
+          if (checkFourPairs(botHand)) {
+            setTimeout(() => declareWin(room, currentBot, false), 1800);
+            return;
+          }
         }
       }
 
@@ -322,32 +306,21 @@ function runBotTurn(room, isInitialDiscard = false) {
     setTimeout(() => {
       if (room.gameEnded) return;
 
+      // Smart Discard Selection: Prioritize throwing singletons (1 count) or odd triplet excess (3 count)
       let singletons = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 1);
-      
-      let faceCount = botHand.filter(c => ['J','Q','K'].includes(c.value)).length;
-      let isAimingForCourtWin = faceCount >= 6;
+      let triplets = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 3);
 
       let cardToDiscard = null;
 
       if (singletons.length > 0) {
-        singletons.sort((a, b) => {
-          if (!isAimingForCourtWin) {
-            return a.points - b.points;
-          } else {
-            let isFaceA = ['J','Q','K'].includes(a.value) ? 1 : 0;
-            let isFaceB = ['J','Q','K'].includes(b.value) ? 1 : 0;
-            if (isFaceA !== isFaceB) return isFaceA - isFaceB;
-            return a.points - b.points;
-          }
-        });
+        // Sort singletons by points ascending (throw low point cards like Aces/Jacks first)
+        singletons.sort((a, b) => a.points - b.points);
         cardToDiscard = singletons[0];
+      } else if (triplets.length > 0) {
+        // Break 3-of-a-kind down into a pair by discarding 1
+        cardToDiscard = triplets[0];
       } else {
-        let triplets = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 3);
-        if (triplets.length > 0) {
-          cardToDiscard = triplets[0];
-        } else {
-          cardToDiscard = botHand[0];
-        }
+        cardToDiscard = botHand[0];
       }
 
       let discardIndex = botHand.findIndex(c => c.id === cardToDiscard.id);
@@ -519,7 +492,6 @@ io.on('connection', (socket) => {
     
     let cardToDiscard = currentRoom.hands[pSeat][cardIndex];
 
-    // PRIVATE WARNING: Only alert the individual player who broke the bluff cooldown rule!
     if (currentRoom.takeCooldown[pSeat] === cardToDiscard.value) {
       socket.emit('privateRuleAlert', `❌ Cooldown Rule: You took rank ${cardToDiscard.value} from DISCARD! You cannot discard rank ${cardToDiscard.value} on the same turn.`);
       return;
