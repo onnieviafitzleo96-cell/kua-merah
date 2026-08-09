@@ -136,8 +136,6 @@
       .casino-table { padding: 6px; border-width: 4px; }
       .splash-title { font-size: 28px; }
       button { padding: 6px 10px; font-size: 11px; margin: 2px; }
-      .tier-grid { grid-template-columns: repeat(2, 1fr); }
-      
       .pile-label { display: none; }
       .empty-label { display: none; }
       .deck-count-label { font-size: 10px; }
@@ -293,6 +291,10 @@
     <button id="nextRoundBtn" onclick="startGame()" style="display:none;">Start Next Round</button>
     <button id="quitBtn" onclick="quitGame()" class="quit-btn">Quit Room</button>
   </div>
+
+  <div id="hostWaitingNotice" style="display:none; font-size:13px; color:#fbc02d; margin-top:4px; font-weight:bold;">
+    Waiting for Host (<span id="hostNameSpan">Host</span>) to start the game...
+  </div>
   
   <div><span id="actionLog" class="action-banner">Join a room tier to begin.</span></div>
   <h2 id="status" style="margin: 3px 0; font-size: 16px;">Ready</h2>
@@ -363,6 +365,7 @@
     let mySeat = 0;
     let roomAction = 'create';
     let myPersistentBalance = 10.00;
+    let isHost = false;
 
     window.addEventListener('DOMContentLoaded', () => {
       let savedName = localStorage.getItem('kua_merah_name');
@@ -577,16 +580,11 @@
       socket.emit('setRoomTier', selectedTier);
 
       document.getElementById('startModal').style.display = 'none';
-      
-      if (isSoloMode) {
-        document.getElementById('startMatchBtn').style.display = 'none';
-      } else {
-        document.getElementById('startMatchBtn').style.display = 'inline-block';
-      }
     }
 
     socket.on('joinedRoomSuccess', (data) => {
       mySeat = data.seat;
+      isHost = data.isHost;
       document.getElementById('watermarkLabel').innerText = isSoloMode ? '♠ SOLO ROOM ♥' : `♠ ROOM: ${data.roomCode} ♥`;
     });
 
@@ -680,19 +678,34 @@
         document.getElementById('welcomeBalanceText').innerText = `$${myPersistentBalance.toFixed(2)}`;
       }
 
+      // Check Host status for Start button vs Waiting message
+      let hostName = state.playerNames[0] || 'Host';
+      let hostNoticeEl = document.getElementById('hostWaitingNotice');
+      
       let deckArea = document.getElementById('deck-area');
       let discardArea = document.getElementById('discard-area');
+
       if (state.gameEnded) {
         deckArea.classList.add('inspectable');
         discardArea.classList.add('inspectable');
-        document.getElementById('startMatchBtn').style.display = 'none';
-        document.getElementById('nextRoundBtn').style.display = 'inline-block';
+        
+        if (isSoloMode || mySeat === 0) {
+          document.getElementById('startMatchBtn').style.display = 'inline-block';
+          document.getElementById('nextRoundBtn').style.display = 'none';
+          hostNoticeEl.style.display = 'none';
+        } else {
+          document.getElementById('startMatchBtn').style.display = 'none';
+          document.getElementById('nextRoundBtn').style.display = 'none';
+          document.getElementById('hostNameSpan').innerText = hostName;
+          hostNoticeEl.style.display = 'block';
+        }
         document.getElementById('claimWinBtn').style.display = 'none';
       } else {
         deckArea.classList.remove('inspectable');
         discardArea.classList.remove('inspectable');
         document.getElementById('startMatchBtn').style.display = 'none';
         document.getElementById('nextRoundBtn').style.display = 'none';
+        hostNoticeEl.style.display = 'none';
 
         if (checkFourPairsFront(state.hands[mySeat])) {
           document.getElementById('claimWinBtn').style.display = 'inline-block';

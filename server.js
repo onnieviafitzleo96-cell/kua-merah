@@ -92,10 +92,11 @@ function getOrCreateRoom(roomCode, isSolo) {
       revealStage: 0,
       isDealing: false,
       roomTier: 10.00,
-      players: [],
+      players: [], // [{ id, name, seat, balance }]
       lastWinnerIdx: 0,
       pendingSteal: null,
-      takeCooldown: [null, null, null, null]
+      takeCooldown: [null, null, null, null],
+      hostId: null
     };
   }
   return rooms[roomCode];
@@ -105,11 +106,11 @@ function updateRoomRoster(room) {
   let names = ['Bot 1', 'Bot 2', 'Bot 3', 'Bot 4'];
   let isHumanFlags = [false, false, false, false];
 
-  room.players.forEach((p, idx) => {
-    if (idx < 4) {
-      names[idx] = p.name;
-      isHumanFlags[idx] = true;
-      p.seat = idx;
+  room.players.forEach((p) => {
+    if (p.seat >= 0 && p.seat < 4) {
+      names[p.seat] = p.name;
+      isHumanFlags[p.seat] = true;
+      room.balances[p.seat] = p.balance;
     }
   });
 
@@ -360,6 +361,10 @@ function declareWin(room, playerIdx, isInstantWin) {
         room.balances[i] = 10.00;
       }
     }
+
+    // Sync updated balances back to player objects
+    let pObj = room.players.find(p => p.seat === i);
+    if (pObj) pObj.balance = room.balances[i];
   }
 
   room.status = `🎉 ${room.playerNames[playerIdx]} Wins! +$${totalWinnings.toFixed(2)}`;
@@ -382,23 +387,40 @@ function endGameNoWinner(room) {
 
 io.on('connection', (socket) => {
   let currentRoom = null;
-  let playerObj = { id: socket.id, name: 'Guest', seat: -1 };
+  let playerObj = { id: socket.id, name: 'Guest', seat: -1, balance: 10.00 };
 
   socket.on('joinRoom', ({ name, roomCode, isSolo, currentBalance }) => {
     let finalCode = isSolo ? `SOLO_${socket.id.substring(0, 5)}` : (roomCode ? roomCode.trim().toUpperCase() : 'KUA88');
     
     currentRoom = getOrCreateRoom(finalCode, isSolo);
     playerObj.name = name ? name.trim() : 'Player 1';
-    
+    playerObj.balance = (currentBalance !== undefined && currentBalance > 0) ? currentBalance : 10.00;
+
+    // Allocate available seat (0 to 3)
+    let occupiedSeats = currentRoom.players.map(p => p.seat);
+    let assignedSeat = 0;
+    for (let s = 0; s < 4; s++) {
+      if (!occupiedSeats.includes(s)) {
+        assignedSeat = s;
+        break;
+      }
+    }
+    playerObj.seat = assignedSeat;
+
+    // Set Host ID to seat 0 player
+    if (currentRoom.players.length === 0) {
+      currentRoom.hostId = socket.id;
+    }
+
     socket.join(finalCode);
     currentRoom.players.push(playerObj);
     updateRoomRoster(currentRoom);
 
-    if (currentBalance !== undefined && currentBalance > 0) {
-      currentRoom.balances[playerObj.seat] = currentBalance;
-    }
-
-    socket.emit('joinedRoomSuccess', { roomCode: finalCode, seat: playerObj.seat });
+    socket.emit('joinedRoomSuccess', { 
+      roomCode: finalCode, 
+      seat: playerObj.seat, 
+      isHost: (currentRoom.hostId === socket.id) 
+    });
 
     if (isSolo) {
       setTimeout(() => startRoundLogic(currentRoom), 800);
@@ -413,6 +435,9 @@ io.on('connection', (socket) => {
   socket.on('leaveRoom', () => {
     if (currentRoom) {
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
+      if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
+        currentRoom.hostId = currentRoom.players[0].id;
+      }
       updateRoomRoster(currentRoom);
       socket.leave(currentRoom.roomCode);
       currentRoom = null;
@@ -420,7 +445,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('startGame', () => {
-    if (currentRoom) {
+    if (currentRoom && socket.id === currentRoom.hostId) {
       startRoundLogic(currentRoom);
     }
   });
@@ -529,6 +554,9 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     if (currentRoom) {
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
+      if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
+        currentRoom.hostId = currentRoom.players[0].id;
+      }
       updateRoomRoster(currentRoom);
     }
   });
