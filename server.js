@@ -96,7 +96,9 @@ function getOrCreateRoom(roomCode, isSolo) {
       lastWinnerIdx: 0,
       pendingSteal: null,
       takeCooldown: [null, null, null, null],
-      hostId: null
+      hostId: null,
+      afkTimer: null,
+      afkWarningTimer: null
     };
   }
   return rooms[roomCode];
@@ -123,6 +125,49 @@ function updateRoomRoster(room) {
   room.playerNames = names;
   room.isHuman = isHumanFlags;
   io.to(room.roomCode).emit('stateUpdate', room);
+}
+
+function clearAfkTimers(room) {
+  if (room.afkWarningTimer) { clearTimeout(room.afkWarningTimer); room.afkWarningTimer = null; }
+  if (room.afkTimer) { clearTimeout(room.afkTimer); room.afkTimer = null; }
+}
+
+function resetTurnTimer(room) {
+  clearAfkTimers(room);
+  if (room.gameEnded || room.isDealing) return;
+
+  let currentSeat = room.turn;
+  if (!room.isHuman[currentSeat]) return; // Only track AFK for human players
+
+  let activePlayerObj = room.players.find(p => p.seat === currentSeat);
+  if (!activePlayerObj) return;
+
+  // 45s Warning
+  room.afkWarningTimer = setTimeout(() => {
+    let socketEl = io.sockets.sockets.get(activePlayerObj.id);
+    if (socketEl) {
+      socketEl.emit('afkWarningPopup', "⚠️ AFK Warning: You have 15 seconds to make a move or you will be replaced by a bot!");
+    }
+  }, 45000);
+
+  // 60s Conversion to Bot
+  room.afkTimer = setTimeout(() => {
+    room.actionLog = `⏳ ${room.playerNames[currentSeat]} was AFK and replaced by a Bot!`;
+    room.isHuman[currentSeat] = false;
+    room.playerNames[currentSeat] = `${room.botPool[currentSeat]} (Bot)`;
+    
+    // Remove player from room.players roster
+    room.players = room.players.filter(p => p.seat !== currentSeat);
+
+    let socketEl = io.sockets.sockets.get(activePlayerObj.id);
+    if (socketEl) {
+      socketEl.emit('afkReplacedAlert', "You were inactive for 60 seconds and replaced by a Bot.");
+      socketEl.leave(room.roomCode);
+    }
+
+    updateRoomRoster(room);
+    runBotTurn(room, false);
+  }, 60000);
 }
 
 function checkForOutOfTurnInterception(room, discarderIdx, discardedCard) {
@@ -199,6 +244,7 @@ function dealCardsOneByOne(room, starterIdx, callback) {
 function startRoundLogic(room) {
   if (!room.gameEnded) return;
 
+  clearAfkTimers(room);
   updateRoomRoster(room);
   room.deck = createDeck();
   room.hands = [[], [], [], []];
@@ -226,6 +272,8 @@ function startRoundLogic(room) {
 
     if (!room.isHuman[starterIdx]) {
       runBotTurn(room, true);
+    } else {
+      resetTurnTimer(room);
     }
   });
 }
@@ -242,6 +290,8 @@ function processTurn(room) {
 
   if (!isHumanTurn) {
     runBotTurn(room, false);
+  } else {
+    resetTurnTimer(room);
   }
 }
 
@@ -256,7 +306,6 @@ function runBotTurn(room, isInitialDiscard = false) {
 
     let tookDiscard = false;
 
-    // STEP 1: DRAW / DISCARD PICKUP EVALUATION
     if (!isInitialDiscard && botHand.length === 7) {
       if (room.discardPile.length > 0) {
         let topDiscard = room.discardPile[room.discardPile.length - 1];
@@ -303,7 +352,6 @@ function runBotTurn(room, isInitialDiscard = false) {
       }
     }
 
-    // STEP 2: ADVANCED DISCARD DECISION
     setTimeout(() => {
       if (room.gameEnded || room.turn !== currentBot) return;
 
@@ -315,8 +363,6 @@ function runBotTurn(room, isInitialDiscard = false) {
       let singletons = botHand.filter(c => rankCounts[c.value] === 1);
       let triplets = botHand.filter(c => rankCounts[c.value] === 3);
 
-      // Evaluate $5 Special Win Progress
-      let redCount = botHand.filter(c => c.isRed).length;
       let blackCount = botHand.filter(c => !c.isRed).length;
       let faceCount = botHand.filter(c => ['J','Q','K'].includes(c.value)).length;
 
@@ -326,31 +372,26 @@ function runBotTurn(room, isInitialDiscard = false) {
       let cardToDiscard = null;
 
       if (singletons.length > 0) {
-        // Score each singleton dynamically based on strategy
         singletons.sort((a, b) => {
           let scoreA = a.points;
           let scoreB = b.points;
 
-          // If chasing All Black special win, heavily penalize discarding black cards
           if (goingForAllBlack) {
             if (!a.isRed) scoreA += 50;
             if (!b.isRed) scoreB += 50;
           }
 
-          // If chasing Court Card win (J, Q, K), penalize discarding face cards
           if (goingForCourtCards) {
             if (['J','Q','K'].includes(a.value)) scoreA += 40;
             if (['J','Q','K'].includes(b.value)) scoreB += 40;
           }
 
-          // Otherwise, bots value high-point red cards (e.g. Red 10s) and are more willing to discard low-value or black singletons
           return scoreA - scoreB;
         });
 
         cardToDiscard = singletons[0];
       } 
       else if (triplets.length > 0) {
-        // If holding triplets, break one down to maintain pair structure
         cardToDiscard = triplets[0];
       } 
       else {
@@ -381,6 +422,7 @@ function runBotTurn(room, isInitialDiscard = false) {
 }
 
 function declareWin(room, playerIdx, isInstantWin) {
+  clearAfkTimers(room);
   room.winner = playerIdx;
   room.gameEnded = true;
   room.lastWinnerIdx = playerIdx;
@@ -415,6 +457,7 @@ function declareWin(room, playerIdx, isInstantWin) {
 }
 
 function endGameNoWinner(room) {
+  clearAfkTimers(room);
   room.gameEnded = true;
   room.revealStage = 2;
   room.actionLog = "Deck empty!";
@@ -469,6 +512,7 @@ io.on('connection', (socket) => {
 
   socket.on('leaveRoom', () => {
     if (currentRoom) {
+      clearAfkTimers(currentRoom);
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
       if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
         currentRoom.hostId = currentRoom.players[0].id;
@@ -521,6 +565,8 @@ io.on('connection', (socket) => {
     let pSeat = playerObj.seat;
     if (pSeat !== currentRoom.turn || currentRoom.hands[pSeat].length >= 8 || currentRoom.gameEnded || currentRoom.isDealing) return;
     
+    resetTurnTimer(currentRoom);
+
     if (currentRoom.deck.length > 0) {
       let c = currentRoom.deck.pop();
       currentRoom.hands[pSeat].push(c);
@@ -543,6 +589,8 @@ io.on('connection', (socket) => {
     let pSeat = playerObj.seat;
     if (pSeat !== currentRoom.turn || currentRoom.discardPile.length === 0 || currentRoom.gameEnded || currentRoom.isDealing) return;
 
+    resetTurnTimer(currentRoom);
+
     let c = currentRoom.discardPile.pop();
     currentRoom.hands[pSeat].push(c);
     autoSortHand(currentRoom.hands[pSeat]);
@@ -561,6 +609,8 @@ io.on('connection', (socket) => {
     let pSeat = playerObj.seat;
     if (pSeat !== currentRoom.turn || currentRoom.hands[pSeat].length !== 8 || currentRoom.gameEnded || currentRoom.isDealing) return;
     
+    clearAfkTimers(currentRoom);
+
     let cardToDiscard = currentRoom.hands[pSeat][cardIndex];
 
     if (currentRoom.takeCooldown[pSeat] === cardToDiscard.value) {
@@ -576,18 +626,19 @@ io.on('connection', (socket) => {
     currentRoom.actionLog = `📤 ${playerObj.name} discarded ${card.value}${card.suit}.`;
     io.to(currentRoom.roomCode).emit('cardSound');
 
-    let intercepted = checkForOutOfTurnInterception(room, pSeat, card);
+    let intercepted = checkForOutOfTurnInterception(currentRoom, pSeat, card);
 
     if (!intercepted) {
       currentRoom.turn = (currentRoom.turn + 1) % 4;
       setTimeout(() => {
-        processTurn(room);
+        processTurn(currentRoom);
       }, 700);
     }
   });
 
   socket.on('disconnect', () => {
     if (currentRoom) {
+      clearAfkTimers(currentRoom);
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
       if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
         currentRoom.hostId = currentRoom.players[0].id;

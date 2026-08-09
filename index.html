@@ -255,9 +255,18 @@
   <!-- Private Rule Alert Modal -->
   <div id="ruleAlertModal" class="modal-overlay" style="display:none;">
     <div class="modal-box" style="border-color:#e53935;">
-      <h2 style="color:#e53935;">⚠️ Illegal Move</h2>
+      <h2 style="color:#e53935;">⚠️ Notice</h2>
       <p id="ruleAlertText" style="font-size:14px; margin:15px 0; color:white; text-align:center;"></p>
       <button onclick="closeRuleAlert()" style="background:#e53935; color:white; width:100%; padding:10px;">Got It</button>
+    </div>
+  </div>
+
+  <!-- AFK Warning Popup Modal -->
+  <div id="afkWarningModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="border-color:#fbc02d;">
+      <h2 style="color:#fbc02d;">⚠️ AFK Warning</h2>
+      <p id="afkWarningText" style="font-size:14px; margin:15px 0; color:white; text-align:center;">You have 15 seconds to make a move or you will be replaced by a Bot!</p>
+      <button onclick="closeAfkWarning()" style="background:#fbc02d; color:#111; font-weight:bold; width:100%; padding:10px;">I'm Here!</button>
     </div>
   </div>
 
@@ -597,6 +606,20 @@
       document.getElementById('ruleAlertModal').style.display = 'none';
     }
 
+    socket.on('afkWarningPopup', (msg) => {
+      document.getElementById('afkWarningText').innerText = msg;
+      document.getElementById('afkWarningModal').style.display = 'flex';
+    });
+
+    function closeAfkWarning() {
+      document.getElementById('afkWarningModal').style.display = 'none';
+    }
+
+    socket.on('afkReplacedAlert', (msg) => {
+      alert(msg);
+      quitGame();
+    });
+
     socket.on('promptSteal', (data) => {
       if (data.playerIdx === mySeat) {
         document.getElementById('stealPromptText').innerText = `${data.name} discarded a card that completes your 4 pairs!`;
@@ -678,9 +701,9 @@
         document.getElementById('welcomeBalanceText').innerText = `$${myPersistentBalance.toFixed(2)}`;
       }
 
-      // Check Host status for Start button vs Waiting message
       let hostName = state.playerNames[0] || 'Host';
       let hostNoticeEl = document.getElementById('hostWaitingNotice');
+      let startMatchBtn = document.getElementById('startMatchBtn');
       
       let deckArea = document.getElementById('deck-area');
       let discardArea = document.getElementById('discard-area');
@@ -690,11 +713,17 @@
         discardArea.classList.add('inspectable');
         
         if (isSoloMode || mySeat === 0) {
-          document.getElementById('startMatchBtn').style.display = 'inline-block';
+          startMatchBtn.style.display = 'inline-block';
+          startMatchBtn.disabled = false;
+          startMatchBtn.style.opacity = '1';
+          startMatchBtn.style.cursor = 'pointer';
           document.getElementById('nextRoundBtn').style.display = 'none';
           hostNoticeEl.style.display = 'none';
         } else {
-          document.getElementById('startMatchBtn').style.display = 'none';
+          startMatchBtn.style.display = 'inline-block';
+          startMatchBtn.disabled = true; // Grayed out for non-hosts
+          startMatchBtn.style.opacity = '0.4';
+          startMatchBtn.style.cursor = 'not-allowed';
           document.getElementById('nextRoundBtn').style.display = 'none';
           document.getElementById('hostNameSpan').innerText = hostName;
           hostNoticeEl.style.display = 'block';
@@ -703,7 +732,7 @@
       } else {
         deckArea.classList.remove('inspectable');
         discardArea.classList.remove('inspectable');
-        document.getElementById('startMatchBtn').style.display = 'none';
+        startMatchBtn.style.display = 'none';
         document.getElementById('nextRoundBtn').style.display = 'none';
         hostNoticeEl.style.display = 'none';
 
