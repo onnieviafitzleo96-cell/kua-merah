@@ -18,8 +18,8 @@
 
     /* Modals */
     .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.88); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 15px; }
-    .modal-box { background: #11361c; border: 2px solid #fbc02d; padding: 25px; border-radius: 14px; max-width: 500px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: 0 0 30px rgba(0,0,0,0.9); }
-    .modal-box h2 { color: #fbc02d; margin-top: 0; }
+    .modal-box { background: #11361c; border: 2px solid #fbc02d; padding: 25px; border-radius: 14px; max-width: 500px; width: 100%; max-height: 85vh; overflow-y: auto; box-shadow: 0 0 30px rgba(0,0,0,0.9); text-align: left; }
+    .modal-box h2, .modal-box h3 { color: #fbc02d; margin-top: 0; text-align: center; }
 
     .mode-toggle { display: flex; gap: 10px; margin-bottom: 15px; }
     .mode-btn { flex: 1; padding: 10px; background: rgba(255,255,255,0.1); border: 2px solid #fbc02d; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; }
@@ -28,9 +28,15 @@
     .name-input { width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #fbc02d; background: #072210; color: white; font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 10px; }
     .name-input:focus { outline: none; border-color: #ffd54f; }
 
-    .tier-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
-    .tier-btn { background: rgba(255,255,255,0.1); border: 2px solid #fbc02d; color: white; padding: 12px 5px; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-    .tier-btn.selected { background: #fbc02d; color: #111; }
+    .tier-select { width: 100%; padding: 12px; border-radius: 8px; border: 2px solid #fbc02d; background: #072210; color: #fbc02d; font-size: 16px; font-weight: bold; text-align: center; margin: 10px 0 15px 0; cursor: pointer; }
+
+    .rules-btn { width: 100%; padding: 10px; background: rgba(251, 192, 45, 0.2); border: 1.5px dashed #fbc02d; color: #fbc02d; font-weight: bold; border-radius: 8px; margin-bottom: 15px; cursor: pointer; }
+    .rules-btn:hover { background: rgba(251, 192, 45, 0.35); }
+
+    /* Rules text styling */
+    .rules-content { font-size: 13px; line-height: 1.5; color: #e0e0e0; }
+    .rules-content ul { padding-left: 18px; margin: 6px 0; }
+    .rules-content li { margin-bottom: 6px; }
 
     /* Layout & Table */
     .casino-table { background: radial-gradient(circle, #124d26 0%, #082913 100%); border: 8px solid #3e2723; border-radius: 20px; padding: 15px; max-width: 900px; margin: 0 auto; box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 5px 20px rgba(0,0,0,0.7); }
@@ -131,8 +137,6 @@
       .casino-table { padding: 6px; border-width: 4px; }
       .splash-title { font-size: 28px; }
       button { padding: 6px 10px; font-size: 11px; margin: 2px; }
-      .tier-grid { grid-template-columns: repeat(2, 1fr); }
-      
       .pile-label { display: none; }
       .empty-label { display: none; }
       .deck-count-label { font-size: 10px; }
@@ -161,7 +165,14 @@
   <div id="startModal" class="modal-overlay">
     <div class="modal-box">
       <h2>Welcome Player!</h2>
+
+      <div style="text-align:center; margin-bottom:12px; background:rgba(251,192,45,0.15); padding:8px; border-radius:8px; border:1px solid #fbc02d;">
+        <span style="font-size:13px; color:#aaa;">Your Balance: </span>
+        <span id="welcomeBalanceText" style="font-size:18px; font-weight:bold; color:#fbc02d;">$10.00</span>
+      </div>
       
+      <button class="rules-btn" onclick="openRulesModal()">📖 How to Play & Rules</button>
+
       <div class="mode-toggle">
         <button id="soloModeBtn" class="mode-btn active" onclick="setPlayMode(true)">Play Solo vs Bots</button>
         <button id="friendsModeBtn" class="mode-btn" onclick="setPlayMode(false)">Play with Friends</button>
@@ -181,15 +192,61 @@
       </div>
 
       <p style="font-size:13px; margin-bottom: 5px; margin-top: 10px;">Select Room Tier:</p>
-      <div class="tier-grid">
-        <button class="tier-btn selected" onclick="selectTier(10, this)">$10 Room</button>
-        <button class="tier-btn" onclick="selectTier(50, this)">$50 Room</button>
-        <button class="tier-btn" onclick="selectTier(100, this)">$100 Room</button>
-        <button class="tier-btn" onclick="selectTier(500, this)">$500 Room</button>
-        <button class="tier-btn" onclick="selectTier(1000, this)">$1,000 Room</button>
-      </div>
+      <select id="roomTierSelect" class="tier-select">
+        <option value="10">$10 Room Tier</option>
+        <option value="30">$30 Room Tier</option>
+        <option value="50">$50 Room Tier</option>
+        <option value="70">$70 Room Tier</option>
+        <option value="100">$100 Room Tier</option>
+        <option value="150">$150 Room Tier</option>
+        <option value="200">$200 Room Tier</option>
+        <option value="250">$250 Room Tier</option>
+        <option value="300">$300 Room Tier</option>
+        <option value="350">$350 Room Tier</option>
+        <option value="500">$500 Room Tier</option>
+        <option value="1000">$1,000 Room Tier</option>
+        <option value="2500">$2,500 Room Tier</option>
+        <option value="5000">$5,000 Room Tier</option>
+        <option value="10000">$10,000 Room Tier</option>
+      </select>
 
-      <button onclick="enterGame()" style="width: 100%; padding: 12px; margin-top: 10px; font-size: 16px;">Enter Casino Room</button>
+      <button onclick="enterGame()" style="width: 100%; padding: 12px; font-size: 16px;">Enter Casino Room</button>
+    </div>
+  </div>
+
+  <!-- Rules Modal -->
+  <div id="rulesModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <h2>📖 Kua Merah Rules</h2>
+      <div class="rules-content">
+        <h3>Objective</h3>
+        <p>Form <b>4 Pairs</b> (8 cards total) in your hand before other players. Your winning payout depends on the red card point value of your winning hand!</p>
+
+        <h3>Point Values</h3>
+        <ul>
+          <li><b>Red 10 (♥10, ♦10):</b> 10 Points (Highest value card!)</li>
+          <li><b>Red 2 to 9:</b> Face value (e.g. ♦7 = 7 Points)</li>
+          <li><b>Red J, Q, K:</b> 2 Points each</li>
+          <li><b>Red Ace (♥A, ♦A):</b> 1 Point</li>
+          <li><b>Black Cards (♠, ♣):</b> 0 Points</li>
+        </ul>
+
+        <h3>Special Payouts (50 Base Points)</h3>
+        <ul>
+          <li><b>All Black Hand:</b> 0 Red cards in winning hand.</li>
+          <li><b>Single Red Ace Hand:</b> Only 1 Red Ace and 7 Black cards.</li>
+          <li><b>All Face Cards:</b> 8 Court cards (J, Q, K).</li>
+        </ul>
+
+        <h3>Gameplay Rules</h3>
+        <ul>
+          <li><b>Drawing:</b> On your turn, draw 1 card from the Middle Deck (secret) OR take the top card from the Discard Pile.</li>
+          <li><b>Bluff Cooldown Rule:</b> If you take a card from the <b>Discard Pile</b>, you <i>cannot</i> discard that same rank on the exact same turn. You must wait at least 1 full round before discarding it. Middle Deck draws have no restriction!</li>
+          <li><b>Out-of-Turn Stealing:</b> If another player discards a card that completes 4 pairs for you, a prompt will ask if you want to steal and declare an instant win out of turn!</li>
+          <li><b>Strategic Declaration:</b> When you hold 4 pairs, you are not forced to win immediately—you can choose to keep drawing to build a higher-scoring red hand before hitting "DECLARE WIN".</li>
+        </ul>
+      </div>
+      <button onclick="closeRulesModal()" style="width:100%; padding:10px; margin-top:12px; background:#fbc02d; color:#111; font-weight:bold; border-radius:6px; border:none; cursor:pointer;">Close Rules</button>
     </div>
   </div>
 
@@ -197,7 +254,7 @@
   <div id="ruleAlertModal" class="modal-overlay" style="display:none;">
     <div class="modal-box" style="border-color:#e53935;">
       <h2 style="color:#e53935;">⚠️ Illegal Move</h2>
-      <p id="ruleAlertText" style="font-size:14px; margin:15px 0; color:white;"></p>
+      <p id="ruleAlertText" style="font-size:14px; margin:15px 0; color:white; text-align:center;"></p>
       <button onclick="closeRuleAlert()" style="background:#e53935; color:white; width:100%; padding:10px;">Got It</button>
     </div>
   </div>
@@ -206,9 +263,9 @@
   <div id="stealModal" class="modal-overlay" style="display:none;">
     <div class="modal-box" style="border-color:#4caf50;">
       <h2 style="color:#4caf50;">⚡ STEAL CARD TO WIN?</h2>
-      <p id="stealPromptText" style="font-size:14px;"></p>
-      <div id="stealCardPreview" style="margin: 15px 0;"></div>
-      <p style="font-size:12px; color:#ccc;">Stealing this card completes 4 pairs for you out of turn!</p>
+      <p id="stealPromptText" style="font-size:14px; text-align:center;"></p>
+      <div id="stealCardPreview" style="margin: 15px 0; text-align:center;"></div>
+      <p style="font-size:12px; color:#ccc; text-align:center;">Stealing this card completes 4 pairs for you out of turn!</p>
       <div style="display:flex; gap:10px; margin-top:15px;">
         <button onclick="respondSteal(true)" style="flex:1; background:#2e7d32; color:white; padding:12px;">Yes, Steal & Win!</button>
         <button onclick="respondSteal(false)" style="flex:1; background:#e53935; color:white; padding:12px;">Pass / Keep Playing</button>
@@ -221,7 +278,7 @@
     <div class="modal-box">
       <h2 id="inspectTitle">Inspecting Cards</h2>
       <div id="inspectGrid" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 15px 0;"></div>
-      <button onclick="closeInspectModal()">Close</button>
+      <button onclick="closeInspectModal()" style="width:100%;">Close</button>
     </div>
   </div>
 
@@ -230,7 +287,7 @@
     <button id="startMatchBtn" onclick="startGame()">Start Game</button>
     <button id="claimWinBtn" class="claim-win-btn" onclick="claimWin()" style="display:none;">🏆 DECLARE WIN (4 PAIRS)</button>
     <button id="nextRoundBtn" onclick="startGame()" style="display:none;">Start Next Round</button>
-    <button id="quitBtn" onclick="quitGame()" class="quit-btn">Quit & Reset Room</button>
+    <button id="quitBtn" onclick="quitGame()" class="quit-btn">Quit Room</button>
   </div>
   
   <div><span id="actionLog" class="action-banner">Join a room tier to begin.</span></div>
@@ -301,6 +358,7 @@
     let isSoloMode = true;
     let mySeat = 0;
     let roomAction = 'create';
+    let myPersistentBalance = 10.00;
 
     setTimeout(() => {
       let splash = document.getElementById('splashScreen');
@@ -339,6 +397,9 @@
       if (seatIdx === mySeat) return 0;
       return (seatIdx - mySeat + 4) % 4;
     }
+
+    function openRulesModal() { document.getElementById('rulesModal').style.display = 'flex'; }
+    function closeRulesModal() { document.getElementById('rulesModal').style.display = 'none'; }
 
     function triggerCardAnimation(data) {
       let srcEl, targetEl;
@@ -420,12 +481,6 @@
       }
     }
 
-    function selectTier(amount, btn) {
-      selectedTier = amount;
-      document.querySelectorAll('.tier-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-    }
-
     function inspectCards(type) {
       if (!currentGameState || !currentGameState.gameEnded) return;
 
@@ -456,16 +511,27 @@
     }
 
     function enterGame() {
+      let tierVal = parseFloat(document.getElementById('roomTierSelect').value);
+
+      if (myPersistentBalance < tierVal) {
+        document.getElementById('ruleAlertText').innerText = `Insufficient balance! You hold $${myPersistentBalance.toFixed(2)}, but this room tier requires $${tierVal.toFixed(2)}.`;
+        document.getElementById('ruleAlertModal').style.display = 'flex';
+        return;
+      }
+
+      selectedTier = tierVal;
       let customName = document.getElementById('playerNameInput').value;
       let roomCode = document.getElementById('roomCodeInput').value;
 
-      socket.emit('joinRoom', { name: customName, roomCode: roomCode, isSolo: isSoloMode });
+      socket.emit('joinRoom', { name: customName, roomCode: roomCode, isSolo: isSoloMode, currentBalance: myPersistentBalance });
       socket.emit('setRoomTier', selectedTier);
 
       document.getElementById('startModal').style.display = 'none';
       
       if (isSoloMode) {
         document.getElementById('startMatchBtn').style.display = 'none';
+      } else {
+        document.getElementById('startMatchBtn').style.display = 'inline-block';
       }
     }
 
@@ -497,7 +563,9 @@
     }
 
     function quitGame() {
-      window.location.reload();
+      socket.emit('leaveRoom');
+      document.getElementById('startModal').style.display = 'flex';
+      document.getElementById('welcomeBalanceText').innerText = `$${myPersistentBalance.toFixed(2)}`;
     }
 
     function startGame() { socket.emit('startGame'); }
@@ -556,6 +624,12 @@
       document.getElementById('actionLog').innerText = state.actionLog;
       document.getElementById('deck-count').innerText = state.deck.length;
 
+      // Track persistent human balance
+      if (state.balances && state.balances[mySeat] !== undefined) {
+        myPersistentBalance = state.balances[mySeat];
+        document.getElementById('welcomeBalanceText').innerText = `$${myPersistentBalance.toFixed(2)}`;
+      }
+
       let deckArea = document.getElementById('deck-area');
       let discardArea = document.getElementById('discard-area');
       if (state.gameEnded) {
@@ -577,7 +651,6 @@
         }
       }
 
-      // Dynamic seats & name rendering relative to current user
       for (let sIdx = 0; sIdx < 4; sIdx++) {
         let domIdx = mapSeatToDomIndex(sIdx);
         document.getElementById(`name-${domIdx}`).innerText = state.playerNames[sIdx];

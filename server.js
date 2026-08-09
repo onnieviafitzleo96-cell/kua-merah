@@ -255,11 +255,9 @@ function runBotTurn(room, isInitialDiscard = false) {
 
     let tookDiscard = false;
 
-    // RULE: Bot MUST take from discard pile if it holds AT LEAST 1 matching card!
     if (!isInitialDiscard && botHand.length === 7) {
       if (room.discardPile.length > 0) {
         let topDiscard = room.discardPile[room.discardPile.length - 1];
-
         let hasMatchingCardInHand = botHand.some(c => c.value === topDiscard.value);
 
         if (hasMatchingCardInHand) {
@@ -288,7 +286,7 @@ function runBotTurn(room, isInitialDiscard = false) {
         }
         let drawnCard = room.deck.pop();
         botHand.push(drawnCard);
-        autoSortHand(botHand);
+        autoSortHand(room.hands[drawnCard]);
 
         io.to(room.roomCode).emit('animateCard', { source: 'deck', targetPlayer: currentBot, card: null, isPrivate: true });
         room.actionLog = `📥 ${room.playerNames[currentBot]} drew from MIDDLE DECK.`;
@@ -306,18 +304,15 @@ function runBotTurn(room, isInitialDiscard = false) {
     setTimeout(() => {
       if (room.gameEnded) return;
 
-      // Smart Discard Selection: Prioritize throwing singletons (1 count) or odd triplet excess (3 count)
       let singletons = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 1);
       let triplets = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 3);
 
       let cardToDiscard = null;
 
       if (singletons.length > 0) {
-        // Sort singletons by points ascending (throw low point cards like Aces/Jacks first)
         singletons.sort((a, b) => a.points - b.points);
         cardToDiscard = singletons[0];
       } else if (triplets.length > 0) {
-        // Break 3-of-a-kind down into a pair by discarding 1
         cardToDiscard = triplets[0];
       } else {
         cardToDiscard = botHand[0];
@@ -361,6 +356,10 @@ function declareWin(room, playerIdx, isInstantWin) {
       room.balances[i] += totalWinnings;
     } else {
       room.balances[i] -= perPlayerCost;
+      // Reset only if balance drops to/below zero
+      if (room.balances[i] <= 0) {
+        room.balances[i] = 10.00;
+      }
     }
   }
 
@@ -386,7 +385,7 @@ io.on('connection', (socket) => {
   let currentRoom = null;
   let playerObj = { id: socket.id, name: 'Guest', seat: -1 };
 
-  socket.on('joinRoom', ({ name, roomCode, isSolo }) => {
+  socket.on('joinRoom', ({ name, roomCode, isSolo, currentBalance }) => {
     let finalCode = isSolo ? `SOLO_${socket.id.substring(0, 5)}` : (roomCode ? roomCode.trim().toUpperCase() : 'KUA88');
     
     currentRoom = getOrCreateRoom(finalCode, isSolo);
@@ -395,6 +394,11 @@ io.on('connection', (socket) => {
     socket.join(finalCode);
     currentRoom.players.push(playerObj);
     updateRoomRoster(currentRoom);
+
+    // Apply persistent balance if valid and non-zero
+    if (currentBalance !== undefined && currentBalance > 0) {
+      currentRoom.balances[playerObj.seat] = currentBalance;
+    }
 
     socket.emit('joinedRoomSuccess', { roomCode: finalCode, seat: playerObj.seat });
 
@@ -406,6 +410,15 @@ io.on('connection', (socket) => {
   socket.on('setRoomTier', (tierAmount) => {
     if (!currentRoom) return;
     currentRoom.roomTier = parseFloat(tierAmount);
+  });
+
+  socket.on('leaveRoom', () => {
+    if (currentRoom) {
+      currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
+      updateRoomRoster(currentRoom);
+      socket.leave(currentRoom.roomCode);
+      currentRoom = null;
+    }
   });
 
   socket.on('startGame', () => {
