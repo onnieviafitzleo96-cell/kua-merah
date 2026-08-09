@@ -92,7 +92,7 @@ function getOrCreateRoom(roomCode, isSolo) {
       revealStage: 0,
       isDealing: false,
       roomTier: 10.00,
-      players: [], // [{ id, name, seat, balance }]
+      players: [],
       lastWinnerIdx: 0,
       pendingSteal: null,
       takeCooldown: [null, null, null, null],
@@ -256,6 +256,7 @@ function runBotTurn(room, isInitialDiscard = false) {
 
     let tookDiscard = false;
 
+    // STEP 1: DRAW / DISCARD PICKUP EVALUATION
     if (!isInitialDiscard && botHand.length === 7) {
       if (room.discardPile.length > 0) {
         let topDiscard = room.discardPile[room.discardPile.length - 1];
@@ -302,20 +303,57 @@ function runBotTurn(room, isInitialDiscard = false) {
       }
     }
 
+    // STEP 2: ADVANCED DISCARD DECISION
     setTimeout(() => {
       if (room.gameEnded || room.turn !== currentBot) return;
 
-      let singletons = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 1);
-      let triplets = botHand.filter(c => botHand.filter(x => x.value === c.value).length === 3);
+      let rankCounts = {};
+      for (let c of botHand) {
+        rankCounts[c.value] = (rankCounts[c.value] || 0) + 1;
+      }
+
+      let singletons = botHand.filter(c => rankCounts[c.value] === 1);
+      let triplets = botHand.filter(c => rankCounts[c.value] === 3);
+
+      // Evaluate $5 Special Win Progress
+      let redCount = botHand.filter(c => c.isRed).length;
+      let blackCount = botHand.filter(c => !c.isRed).length;
+      let faceCount = botHand.filter(c => ['J','Q','K'].includes(c.value)).length;
+
+      let goingForAllBlack = blackCount >= 6;
+      let goingForCourtCards = faceCount >= 5;
 
       let cardToDiscard = null;
 
       if (singletons.length > 0) {
-        singletons.sort((a, b) => a.points - b.points);
+        // Score each singleton dynamically based on strategy
+        singletons.sort((a, b) => {
+          let scoreA = a.points;
+          let scoreB = b.points;
+
+          // If chasing All Black special win, heavily penalize discarding black cards
+          if (goingForAllBlack) {
+            if (!a.isRed) scoreA += 50;
+            if (!b.isRed) scoreB += 50;
+          }
+
+          // If chasing Court Card win (J, Q, K), penalize discarding face cards
+          if (goingForCourtCards) {
+            if (['J','Q','K'].includes(a.value)) scoreA += 40;
+            if (['J','Q','K'].includes(b.value)) scoreB += 40;
+          }
+
+          // Otherwise, bots value high-point red cards (e.g. Red 10s) and are more willing to discard low-value or black singletons
+          return scoreA - scoreB;
+        });
+
         cardToDiscard = singletons[0];
-      } else if (triplets.length > 0) {
+      } 
+      else if (triplets.length > 0) {
+        // If holding triplets, break one down to maintain pair structure
         cardToDiscard = triplets[0];
-      } else {
+      } 
+      else {
         cardToDiscard = botHand[0];
       }
 
@@ -362,7 +400,6 @@ function declareWin(room, playerIdx, isInstantWin) {
       }
     }
 
-    // Sync updated balances back to player objects
     let pObj = room.players.find(p => p.seat === i);
     if (pObj) pObj.balance = room.balances[i];
   }
@@ -396,7 +433,6 @@ io.on('connection', (socket) => {
     playerObj.name = name ? name.trim() : 'Player 1';
     playerObj.balance = (currentBalance !== undefined && currentBalance > 0) ? currentBalance : 10.00;
 
-    // Allocate available seat (0 to 3)
     let occupiedSeats = currentRoom.players.map(p => p.seat);
     let assignedSeat = 0;
     for (let s = 0; s < 4; s++) {
@@ -407,7 +443,6 @@ io.on('connection', (socket) => {
     }
     playerObj.seat = assignedSeat;
 
-    // Set Host ID to seat 0 player
     if (currentRoom.players.length === 0) {
       currentRoom.hostId = socket.id;
     }
@@ -541,12 +576,12 @@ io.on('connection', (socket) => {
     currentRoom.actionLog = `📤 ${playerObj.name} discarded ${card.value}${card.suit}.`;
     io.to(currentRoom.roomCode).emit('cardSound');
 
-    let intercepted = checkForOutOfTurnInterception(currentRoom, pSeat, card);
+    let intercepted = checkForOutOfTurnInterception(room, pSeat, card);
 
     if (!intercepted) {
       currentRoom.turn = (currentRoom.turn + 1) % 4;
       setTimeout(() => {
-        processTurn(currentRoom);
+        processTurn(room);
       }, 700);
     }
   });
