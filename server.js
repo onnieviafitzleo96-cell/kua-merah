@@ -96,12 +96,36 @@ function getOrCreateRoom(roomCode, isSolo) {
       lastWinnerIdx: 0,
       pendingSteal: null,
       takeCooldown: [null, null, null, null],
-      hostId: null,
-      afkTimer: null,
-      afkWarningTimer: null
+      hostId: null
     };
   }
   return rooms[roomCode];
+}
+
+function getCleanRoomState(room) {
+  return {
+    roomCode: room.roomCode,
+    isSolo: room.isSolo,
+    deck: room.deck,
+    hands: room.hands,
+    discardPile: room.discardPile,
+    turn: room.turn,
+    winner: room.winner,
+    status: room.status,
+    actionLog: room.actionLog,
+    playerNames: room.playerNames,
+    isHuman: room.isHuman,
+    balances: room.balances,
+    gameEnded: room.gameEnded,
+    revealStage: room.revealStage,
+    isDealing: room.isDealing,
+    roomTier: room.roomTier,
+    lastWinnerIdx: room.lastWinnerIdx
+  };
+}
+
+function broadcastRoomState(room) {
+  io.to(room.roomCode).emit('stateUpdate', getCleanRoomState(room));
 }
 
 function updateRoomRoster(room) {
@@ -124,7 +148,7 @@ function updateRoomRoster(room) {
 
   room.playerNames = names;
   room.isHuman = isHumanFlags;
-  io.to(room.roomCode).emit('stateUpdate', room);
+  broadcastRoomState(room);
 }
 
 function clearAfkTimers(room) {
@@ -137,26 +161,23 @@ function resetTurnTimer(room) {
   if (room.gameEnded || room.isDealing) return;
 
   let currentSeat = room.turn;
-  if (!room.isHuman[currentSeat]) return; // Only track AFK for human players
+  if (!room.isHuman[currentSeat]) return;
 
   let activePlayerObj = room.players.find(p => p.seat === currentSeat);
   if (!activePlayerObj) return;
 
-  // 45s Warning
   room.afkWarningTimer = setTimeout(() => {
     let socketEl = io.sockets.sockets.get(activePlayerObj.id);
     if (socketEl) {
-      socketEl.emit('afkWarningPopup', "⚠️ AFK Warning: You have 15 seconds to make a move or you will be replaced by a bot!");
+      socketEl.emit('afkWarningPopup', "⚠️ AFK Warning: You have 15 seconds to make a move or you will be replaced by a Bot!");
     }
   }, 45000);
 
-  // 60s Conversion to Bot
   room.afkTimer = setTimeout(() => {
     room.actionLog = `⏳ ${room.playerNames[currentSeat]} was AFK and replaced by a Bot!`;
     room.isHuman[currentSeat] = false;
     room.playerNames[currentSeat] = `${room.botPool[currentSeat]} (Bot)`;
     
-    // Remove player from room.players roster
     room.players = room.players.filter(p => p.seat !== currentSeat);
 
     let socketEl = io.sockets.sockets.get(activePlayerObj.id);
@@ -203,7 +224,7 @@ function checkForOutOfTurnInterception(room, discarderIdx, discardedCard) {
       room.actionLog = `⚡ ${room.playerNames[targetWinner]} STOLE ${stolenCard.value}${stolenCard.suit} out of turn to WIN!`;
       io.to(room.roomCode).emit('cardSound');
       
-      setTimeout(() => io.to(room.roomCode).emit('stateUpdate', room), 600);
+      setTimeout(() => broadcastRoomState(room), 600);
       declareWin(room, targetWinner, false);
       return true;
     }
@@ -233,7 +254,7 @@ function dealCardsOneByOne(room, starterIdx, callback) {
       autoSortHand(room.hands[pIdx]);
       io.to(room.roomCode).emit('animateCard', { source: 'deck', targetPlayer: pIdx, card: null, isPrivate: true });
       io.to(room.roomCode).emit('cardSound');
-      io.to(room.roomCode).emit('stateUpdate', room);
+      broadcastRoomState(room);
       dealtCount++;
     }
 
@@ -268,7 +289,7 @@ function startRoundLogic(room) {
 
     room.actionLog = `Cards dealt! ${room.playerNames[starterIdx]} starts first with 8 cards.`;
     room.status = `Turn: ${room.playerNames[starterIdx]}`;
-    io.to(room.roomCode).emit('stateUpdate', room);
+    broadcastRoomState(room);
 
     if (!room.isHuman[starterIdx]) {
       runBotTurn(room, true);
@@ -284,7 +305,7 @@ function processTurn(room) {
   let currentTurnSeat = room.turn;
   room.takeCooldown[currentTurnSeat] = null;
   room.status = `Turn: ${room.playerNames[currentTurnSeat]}`;
-  io.to(room.roomCode).emit('stateUpdate', room);
+  broadcastRoomState(room);
 
   let isHumanTurn = room.isHuman[currentTurnSeat];
 
@@ -321,7 +342,7 @@ function runBotTurn(room, isInitialDiscard = false) {
           room.actionLog = `🎴 ${room.playerNames[currentBot]} took ${c.value}${c.suit} from DISCARD!`;
           io.to(room.roomCode).emit('cardSound');
           
-          setTimeout(() => io.to(room.roomCode).emit('stateUpdate', room), 600);
+          setTimeout(() => broadcastRoomState(room), 600);
 
           if (checkFourPairs(botHand)) {
             setTimeout(() => declareWin(room, currentBot, false), 1800);
@@ -343,7 +364,7 @@ function runBotTurn(room, isInitialDiscard = false) {
         room.actionLog = `📥 ${room.playerNames[currentBot]} drew from MIDDLE DECK.`;
         io.to(room.roomCode).emit('cardSound');
         
-        setTimeout(() => io.to(room.roomCode).emit('stateUpdate', room), 600);
+        setTimeout(() => broadcastRoomState(room), 600);
       }
 
       if (checkFourPairs(botHand)) {
@@ -448,11 +469,11 @@ function declareWin(room, playerIdx, isInstantWin) {
 
   room.status = `🎉 ${room.playerNames[playerIdx]} Wins! +$${totalWinnings.toFixed(2)}`;
   room.revealStage = 1;
-  io.to(room.roomCode).emit('stateUpdate', room);
+  broadcastRoomState(room);
 
   setTimeout(() => {
     room.revealStage = 2;
-    io.to(room.roomCode).emit('stateUpdate', room);
+    broadcastRoomState(room);
   }, 2000);
 }
 
@@ -462,7 +483,7 @@ function endGameNoWinner(room) {
   room.revealStage = 2;
   room.actionLog = "Deck empty!";
   room.status = "No winner this round. All cards revealed.";
-  io.to(room.roomCode).emit('stateUpdate', room);
+  broadcastRoomState(room);
 }
 
 io.on('connection', (socket) => {
@@ -551,7 +572,7 @@ io.on('connection', (socket) => {
       currentRoom.actionLog = `⚡ ${currentRoom.playerNames[stealData.playerIdx]} STOLE ${stolenCard.value}${stolenCard.suit} to WIN!`;
       io.to(currentRoom.roomCode).emit('cardSound');
       
-      setTimeout(() => io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom), 600);
+      setTimeout(() => broadcastRoomState(currentRoom), 600);
       declareWin(currentRoom, stealData.playerIdx, false);
     } else {
       currentRoom.actionLog = `${currentRoom.playerNames[stealData.playerIdx]} passed on stealing. Game continues!`;
@@ -578,7 +599,7 @@ io.on('connection', (socket) => {
       currentRoom.actionLog = `📥 ${playerObj.name} drew from MIDDLE DECK.`;
       io.to(currentRoom.roomCode).emit('cardSound');
 
-      setTimeout(() => io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom), 600);
+      setTimeout(() => broadcastRoomState(currentRoom), 600);
     } else {
       endGameNoWinner(currentRoom);
     }
@@ -601,7 +622,7 @@ io.on('connection', (socket) => {
     currentRoom.actionLog = `🎴 ${playerObj.name} took ${c.value}${c.suit} from DISCARD pile!`;
     io.to(currentRoom.roomCode).emit('cardSound');
 
-    setTimeout(() => io.to(currentRoom.roomCode).emit('stateUpdate', currentRoom), 600);
+    setTimeout(() => broadcastRoomState(currentRoom), 600);
   });
 
   socket.on('discardCard', (cardIndex) => {
@@ -648,6 +669,7 @@ io.on('connection', (socket) => {
   });
 });
 
-http.listen(3000, () => {
-  console.log('Kua Merah server running on http://localhost:3000');
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+  console.log(`Kua Merah server running on port ${PORT}`);
 });
