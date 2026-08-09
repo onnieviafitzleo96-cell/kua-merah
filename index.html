@@ -367,7 +367,11 @@
   </div>
 
   <script>
-    const socket = io();
+    // Force direct WebSocket transport to bypass HTTP long-polling latency on Render
+    const socket = io({
+      transports: ['websocket']
+    });
+
     let currentGameState = null;
     let selectedTier = 10;
     let isSoloMode = true;
@@ -721,7 +725,7 @@
           hostNoticeEl.style.display = 'none';
         } else {
           startMatchBtn.style.display = 'inline-block';
-          startMatchBtn.disabled = true; // Grayed out for non-hosts
+          startMatchBtn.disabled = true;
           startMatchBtn.style.opacity = '0.4';
           startMatchBtn.style.cursor = 'not-allowed';
           document.getElementById('nextRoundBtn').style.display = 'none';
