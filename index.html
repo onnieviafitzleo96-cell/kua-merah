@@ -514,7 +514,7 @@
     let selectedCardIndex = -1;
     let isSessionStopped = false;
 
-    // Track newly drawn card for yellow glow indicator (1 second)
+    // Track newly drawn card for yellow glow indicator (0.2s)
     let lastHandCards = [];
     let newlyDrawnCardId = null;
     let newlyDrawnTimer = null;
@@ -1179,7 +1179,7 @@
       document.getElementById('actionLog').innerText = state.actionLog;
       document.getElementById('deck-count').innerText = state.deck.length;
 
-      // Track newly drawn card for yellow highlight (1 second, excluded during initial distribution)
+      // Track newly drawn card for yellow highlight (0.2s, excluded during initial distribution)
       if (state.hands && state.hands[mySeat]) {
         let currentHand = state.hands[mySeat];
         if (lastHandCards.length === 7 && currentHand.length === 8 && state.turn === mySeat && !state.isDealing) {
@@ -1191,7 +1191,7 @@
             newlyDrawnTimer = setTimeout(() => {
               newlyDrawnCardId = null;
               renderPlayerHand();
-            }, 1000);
+            }, 200);
           }
         }
         lastHandCards = [...currentHand];
