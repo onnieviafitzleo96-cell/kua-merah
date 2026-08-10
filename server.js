@@ -6,7 +6,6 @@ const io = require('socket.io')(http);
 app.use(express.static(__dirname));
 
 const BOT_NAMES = ['Oliver', 'Emma', 'Liam', 'Charlotte', 'Jack', 'Sophia', 'Henry', 'Amelia', 'James', 'Mia'];
-
 let rooms = {};
 
 function createDeck() {
@@ -23,7 +22,19 @@ function createDeck() {
         else pts = parseInt(v);
       }
       let rotation = (Math.random() * 30 - 15).toFixed(1);
-      deck.push({ suit: s, value: v, isRed: isRed, points: pts, rotation: rotation, id: v + s });
+      let offsetX = (Math.random() * 12 - 6).toFixed(1);
+      let offsetY = (Math.random() * 12 - 6).toFixed(1);
+
+      deck.push({ 
+        suit: s, 
+        value: v, 
+        isRed: isRed, 
+        points: pts, 
+        rotation: rotation, 
+        offsetX: offsetX,
+        offsetY: offsetY,
+        id: v + s 
+      });
     }
   }
   return deck.sort(() => Math.random() - 0.5);
@@ -41,7 +52,7 @@ function autoSortHand(hand) {
     let isPairB = countB >= 2 ? 1 : 0;
 
     if (isPairA !== isPairB) return isPairB - isPairA;
-    if (rankOrder[a.value] !== rankOrder[b.value]) return rankOrder[a.value] - rankOrder[b.value];
+    if (rankOrder[a.value] !== rankOrder[b.value]) return rankOrder[b.value] - rankOrder[a.value];
     return a.suit.localeCompare(b.suit);
   });
 }
@@ -89,6 +100,7 @@ function getOrCreateRoom(roomCode, isSolo) {
       isHuman: [false, false, false, false],
       balances: [10.00, 10.00, 10.00, 10.00],
       gameEnded: true,
+      sessionStopped: false,
       revealStage: 0,
       isDealing: false,
       roomTier: 10.00,
@@ -96,7 +108,9 @@ function getOrCreateRoom(roomCode, isSolo) {
       lastWinnerIdx: 0,
       pendingSteal: null,
       takeCooldown: [null, null, null, null],
-      hostId: null
+      hostId: null,
+      roundCount: 0,
+      roundHistory: []
     };
   }
   return rooms[roomCode];
@@ -117,15 +131,35 @@ function getCleanRoomState(room) {
     isHuman: room.isHuman,
     balances: room.balances,
     gameEnded: room.gameEnded,
+    sessionStopped: room.sessionStopped,
     revealStage: room.revealStage,
     isDealing: room.isDealing,
     roomTier: room.roomTier,
-    lastWinnerIdx: room.lastWinnerIdx
+    lastWinnerIdx: room.lastWinnerIdx,
+    roundCount: room.roundCount,
+    roundHistory: room.roundHistory
   };
 }
 
 function broadcastRoomState(room) {
   io.to(room.roomCode).emit('stateUpdate', getCleanRoomState(room));
+}
+
+function broadcastRoomList() {
+  let roomList = [];
+  for (let code in rooms) {
+    let r = rooms[code];
+    if (!r.isSolo && r.players.length > 0) {
+      roomList.push({
+        roomCode: r.roomCode,
+        humanCount: r.players.length,
+        tier: r.roomTier,
+        isFull: r.players.length >= 4,
+        gameEnded: r.gameEnded
+      });
+    }
+  }
+  io.emit('roomListUpdate', roomList);
 }
 
 function updateRoomRoster(room) {
@@ -143,52 +177,100 @@ function updateRoomRoster(room) {
   for (let i = 0; i < 4; i++) {
     if (!isHumanFlags[i]) {
       names[i] = `${room.botPool[i]} (Bot)`;
+      if (room.roundCount === 0 && room.gameEnded) {
+        room.balances[i] = room.roomTier;
+      }
     }
   }
 
   room.playerNames = names;
   room.isHuman = isHumanFlags;
   broadcastRoomState(room);
+  broadcastRoomList();
 }
 
-function clearAfkTimers(room) {
-  if (room.afkWarningTimer) { clearTimeout(room.afkWarningTimer); room.afkWarningTimer = null; }
-  if (room.afkTimer) { clearTimeout(room.afkTimer); room.afkTimer = null; }
-}
+function calculateSettlements(room) {
+  // 1. Build round-by-round transaction log
+  let roundLogs = room.roundHistory.map((r) => {
+    return {
+      roundNumber: r.roundNumber,
+      winnerName: r.winnerName,
+      totalWinnings: r.totalWinnings,
+      perPlayerCost: r.perPlayerCost,
+      payments: r.payments || []
+    };
+  });
 
-function resetTurnTimer(room) {
-  clearAfkTimers(room);
-  if (room.gameEnded || room.isDealing) return;
-
-  let currentSeat = room.turn;
-  if (!room.isHuman[currentSeat]) return;
-
-  let activePlayerObj = room.players.find(p => p.seat === currentSeat);
-  if (!activePlayerObj) return;
-
-  room.afkWarningTimer = setTimeout(() => {
-    let socketEl = io.sockets.sockets.get(activePlayerObj.id);
-    if (socketEl) {
-      socketEl.emit('afkWarningPopup', "⚠️ AFK Warning: You have 15 seconds to make a move or you will be replaced by a Bot!");
+  // 2. Pure Session Net Calculation (Calculated strictly from round history, ignoring starting wallet modal)
+  let sessionNet = [0, 0, 0, 0];
+  room.roundHistory.forEach((r) => {
+    if (r.netChanges) {
+      r.netChanges.forEach((change, i) => {
+        sessionNet[i] += change;
+      });
     }
-  }, 45000);
+  });
 
-  room.afkTimer = setTimeout(() => {
-    room.actionLog = `⏳ ${room.playerNames[currentSeat]} was AFK and replaced by a Bot!`;
-    room.isHuman[currentSeat] = false;
-    room.playerNames[currentSeat] = `${room.botPool[currentSeat]} (Bot)`;
-    
-    room.players = room.players.filter(p => p.seat !== currentSeat);
+  let netBalances = room.playerNames.map((name, i) => {
+    return {
+      index: i,
+      name: name,
+      isHuman: room.isHuman[i],
+      netChange: sessionNet[i]
+    };
+  });
 
-    let socketEl = io.sockets.sockets.get(activePlayerObj.id);
-    if (socketEl) {
-      socketEl.emit('afkReplacedAlert', "You were inactive for 60 seconds and replaced by a Bot.");
-      socketEl.leave(room.roomCode);
+  let debtors = netBalances.filter(p => p.netChange < -0.001).map(p => ({ ...p, amount: Math.abs(p.netChange) }));
+  let creditors = netBalances.filter(p => p.netChange > 0.001).map(p => ({ ...p, amount: p.netChange }));
+
+  debtors.sort((a, b) => b.amount - a.amount);
+  creditors.sort((a, b) => b.amount - a.amount);
+
+  let settlements = [];
+
+  let d = 0, c = 0;
+  while (d < debtors.length && c < creditors.length) {
+    let debtor = debtors[d];
+    let creditor = creditors[c];
+
+    let payment = Math.min(debtor.amount, creditor.amount);
+    if (payment > 0.001) {
+      settlements.push({
+        fromIdx: debtor.index,
+        fromName: debtor.name,
+        toIdx: creditor.index,
+        toName: creditor.name,
+        amount: payment
+      });
     }
 
-    updateRoomRoster(room);
-    runBotTurn(room, false);
-  }, 60000);
+    debtor.amount -= payment;
+    creditor.amount -= payment;
+
+    if (debtor.amount <= 0.001) d++;
+    if (creditor.amount <= 0.001) c++;
+  }
+
+  let playerSummaries = room.playerNames.map((name, idx) => {
+    let pays = settlements.filter(s => s.fromIdx === idx);
+    let receives = settlements.filter(s => s.toIdx === idx);
+    let net = sessionNet[idx];
+
+    return {
+      name: name,
+      netChange: net,
+      pays: pays,
+      receives: receives
+    };
+  });
+
+  return {
+    roundCount: room.roundCount,
+    roundLogs: roundLogs,
+    playerSummaries: playerSummaries,
+    settlements: settlements,
+    netBalances: netBalances
+  };
 }
 
 function checkForOutOfTurnInterception(room, discarderIdx, discardedCard) {
@@ -212,7 +294,7 @@ function checkForOutOfTurnInterception(room, discarderIdx, discardedCard) {
     let targetWinner = waitingWinners[0];
 
     if (room.isHuman[targetWinner]) {
-      room.pendingSteal = { playerIdx: targetWinner, card: discardedCard };
+      room.pendingSteal = { playerIdx: targetWinner, card: discardedCard, discarderIdx: discarderIdx };
       io.to(room.roomCode).emit('promptSteal', { playerIdx: targetWinner, card: discardedCard, name: room.playerNames[discarderIdx] });
       return true;
     } else {
@@ -259,13 +341,13 @@ function dealCardsOneByOne(room, starterIdx, callback) {
     }
 
     pIdx = (pIdx + 1) % 4;
-  }, 200);
+  }, 180);
 }
 
 function startRoundLogic(room) {
-  if (!room.gameEnded) return;
+  if (!room.gameEnded || room.sessionStopped) return;
 
-  clearAfkTimers(room);
+  room.roundCount++;
   updateRoomRoster(room);
   room.deck = createDeck();
   room.hands = [[], [], [], []];
@@ -278,7 +360,7 @@ function startRoundLogic(room) {
 
   let starterIdx = room.lastWinnerIdx;
   room.turn = starterIdx;
-  room.actionLog = `$${room.roomTier} Room - ${room.playerNames[starterIdx]} starts first!`;
+  room.actionLog = `Round ${room.roundCount} - $${room.roomTier} Tier - ${room.playerNames[starterIdx]} starts!`;
   room.status = `Turn: ${room.playerNames[starterIdx]}`;
 
   dealCardsOneByOne(room, starterIdx, () => {
@@ -287,14 +369,12 @@ function startRoundLogic(room) {
       return;
     }
 
-    room.actionLog = `Cards dealt! ${room.playerNames[starterIdx]} starts first with 8 cards.`;
+    room.actionLog = `Cards dealt! ${room.playerNames[starterIdx]} starts with 8 cards.`;
     room.status = `Turn: ${room.playerNames[starterIdx]}`;
     broadcastRoomState(room);
 
     if (!room.isHuman[starterIdx]) {
       runBotTurn(room, true);
-    } else {
-      resetTurnTimer(room);
     }
   });
 }
@@ -311,8 +391,6 @@ function processTurn(room) {
 
   if (!isHumanTurn) {
     runBotTurn(room, false);
-  } else {
-    resetTurnTimer(room);
   }
 }
 
@@ -330,9 +408,12 @@ function runBotTurn(room, isInitialDiscard = false) {
     if (!isInitialDiscard && botHand.length === 7) {
       if (room.discardPile.length > 0) {
         let topDiscard = room.discardPile[room.discardPile.length - 1];
-        let hasMatchingCardInHand = botHand.some(c => c.value === topDiscard.value);
+        let cardCountInHand = botHand.filter(c => c.value === topDiscard.value).length;
 
-        if (hasMatchingCardInHand) {
+        let testHand = [...botHand, topDiscard];
+        let completesWin = checkFourPairs(testHand);
+
+        if (cardCountInHand === 1 || completesWin) {
           let c = room.discardPile.pop();
           botHand.push(c);
           autoSortHand(botHand);
@@ -345,7 +426,7 @@ function runBotTurn(room, isInitialDiscard = false) {
           setTimeout(() => broadcastRoomState(room), 600);
 
           if (checkFourPairs(botHand)) {
-            setTimeout(() => declareWin(room, currentBot, false), 1800);
+            setTimeout(() => declareWin(room, currentBot, false), 1000);
             return;
           }
         }
@@ -368,7 +449,7 @@ function runBotTurn(room, isInitialDiscard = false) {
       }
 
       if (checkFourPairs(botHand)) {
-        setTimeout(() => declareWin(room, currentBot, false), 1800);
+        setTimeout(() => declareWin(room, currentBot, false), 1000);
         return;
       }
     }
@@ -381,41 +462,17 @@ function runBotTurn(room, isInitialDiscard = false) {
         rankCounts[c.value] = (rankCounts[c.value] || 0) + 1;
       }
 
-      let singletons = botHand.filter(c => rankCounts[c.value] === 1);
       let triplets = botHand.filter(c => rankCounts[c.value] === 3);
-
-      let blackCount = botHand.filter(c => !c.isRed).length;
-      let faceCount = botHand.filter(c => ['J','Q','K'].includes(c.value)).length;
-
-      let goingForAllBlack = blackCount >= 6;
-      let goingForCourtCards = faceCount >= 5;
+      let singletons = botHand.filter(c => rankCounts[c.value] === 1);
 
       let cardToDiscard = null;
 
-      if (singletons.length > 0) {
-        singletons.sort((a, b) => {
-          let scoreA = a.points;
-          let scoreB = b.points;
-
-          if (goingForAllBlack) {
-            if (!a.isRed) scoreA += 50;
-            if (!b.isRed) scoreB += 50;
-          }
-
-          if (goingForCourtCards) {
-            if (['J','Q','K'].includes(a.value)) scoreA += 40;
-            if (['J','Q','K'].includes(b.value)) scoreB += 40;
-          }
-
-          return scoreA - scoreB;
-        });
-
-        cardToDiscard = singletons[0];
-      } 
-      else if (triplets.length > 0) {
+      if (triplets.length > 0) {
         cardToDiscard = triplets[0];
-      } 
-      else {
+      } else if (singletons.length > 0) {
+        singletons.sort((a, b) => a.points - b.points);
+        cardToDiscard = singletons[0];
+      } else {
         cardToDiscard = botHand[0];
       }
 
@@ -435,15 +492,14 @@ function runBotTurn(room, isInitialDiscard = false) {
         room.turn = (room.turn + 1) % 4;
         setTimeout(() => {
           processTurn(room);
-        }, 700);
+        }, 600);
       }
-    }, 1800);
+    }, 600);
 
-  }, isInitialDiscard ? 1000 : 1500);
+  }, isInitialDiscard ? 600 : 800);
 }
 
 function declareWin(room, playerIdx, isInstantWin) {
-  clearAfkTimers(room);
   room.winner = playerIdx;
   room.gameEnded = true;
   room.lastWinnerIdx = playerIdx;
@@ -453,32 +509,66 @@ function declareWin(room, playerIdx, isInstantWin) {
   let perPlayerCost = (totalPoints * 0.10) * scale;
   let totalWinnings = perPlayerCost * 3;
 
+  let netChanges = [0, 0, 0, 0];
+  let roundPayments = [];
+
   for (let i = 0; i < 4; i++) {
     if (i === playerIdx) {
       room.balances[i] += totalWinnings;
+      netChanges[i] = totalWinnings;
     } else {
       room.balances[i] -= perPlayerCost;
-      if (room.balances[i] <= 0) {
-        room.balances[i] = 10.00;
-      }
+      netChanges[i] = -perPlayerCost;
+
+      roundPayments.push({
+        from: room.playerNames[i],
+        to: room.playerNames[playerIdx],
+        amount: perPlayerCost
+      });
     }
 
     let pObj = room.players.find(p => p.seat === i);
     if (pObj) pObj.balance = room.balances[i];
   }
 
-  room.status = `🎉 ${room.playerNames[playerIdx]} Wins! +$${totalWinnings.toFixed(2)}`;
+  room.roundHistory.push({
+    roundNumber: room.roundCount,
+    winnerName: room.playerNames[playerIdx],
+    points: totalPoints,
+    perPlayerCost: perPlayerCost,
+    totalWinnings: totalWinnings,
+    payments: roundPayments,
+    netChanges: [...netChanges],
+    playerNames: [...room.playerNames]
+  });
+
+  room.status = `🎉 ${room.playerNames[playerIdx]} Wins Round ${room.roundCount}! +$${totalWinnings.toFixed(2)}`;
   room.revealStage = 1;
   broadcastRoomState(room);
 
+  io.to(room.roomCode).emit('showWinnerAnnouncement', {
+    winnerIdx: playerIdx,
+    winnerName: room.playerNames[playerIdx],
+    winnings: totalWinnings
+  });
+
   setTimeout(() => {
+    io.to(room.roomCode).emit('roundResultBreakdown', {
+      winnerName: room.playerNames[playerIdx],
+      points: totalPoints,
+      perPlayerCost: perPlayerCost,
+      totalWinnings: totalWinnings,
+      playerNames: room.playerNames,
+      netChanges: netChanges,
+      balances: room.balances
+    });
+
     room.revealStage = 2;
     broadcastRoomState(room);
-  }, 2000);
+  }, 2500);
 }
 
 function endGameNoWinner(room) {
-  clearAfkTimers(room);
   room.gameEnded = true;
   room.revealStage = 2;
   room.actionLog = "Deck empty!";
@@ -489,6 +579,9 @@ function endGameNoWinner(room) {
 io.on('connection', (socket) => {
   let currentRoom = null;
   let playerObj = { id: socket.id, name: 'Guest', seat: -1, balance: 10.00 };
+
+  socket.emit('getRoomList');
+  broadcastRoomList();
 
   socket.on('joinRoom', ({ name, roomCode, isSolo, currentBalance }) => {
     let finalCode = isSolo ? `SOLO_${socket.id.substring(0, 5)}` : (roomCode ? roomCode.trim().toUpperCase() : 'KUA88');
@@ -506,6 +599,7 @@ io.on('connection', (socket) => {
       }
     }
     playerObj.seat = assignedSeat;
+    currentRoom.balances[assignedSeat] = playerObj.balance;
 
     if (currentRoom.players.length === 0) {
       currentRoom.hostId = socket.id;
@@ -522,30 +616,55 @@ io.on('connection', (socket) => {
     });
 
     if (isSolo) {
-      setTimeout(() => startRoundLogic(currentRoom), 800);
+      setTimeout(() => startRoundLogic(currentRoom), 600);
     }
   });
 
   socket.on('setRoomTier', (tierAmount) => {
     if (!currentRoom) return;
     currentRoom.roomTier = parseFloat(tierAmount);
+    updateRoomRoster(currentRoom);
+  });
+
+  socket.on('getLedgerHistory', () => {
+    if (!currentRoom) return;
+    let data = calculateSettlements(currentRoom);
+    socket.emit('ledgerHistoryData', data);
+  });
+
+  socket.on('stopGame', () => {
+    if (!currentRoom) return;
+    currentRoom.sessionStopped = true;
+    currentRoom.gameEnded = true;
+    currentRoom.status = "🛑 Session Ended. Final Ledger Settled.";
+    currentRoom.actionLog = "Game Session Stopped by player. Refer to Ledger for Payments.";
+
+    let data = calculateSettlements(currentRoom);
+    io.to(currentRoom.roomCode).emit('gameSessionStopped', data);
+    broadcastRoomState(currentRoom);
   });
 
   socket.on('leaveRoom', () => {
     if (currentRoom) {
-      clearAfkTimers(currentRoom);
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
       if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
         currentRoom.hostId = currentRoom.players[0].id;
       }
-      updateRoomRoster(currentRoom);
+
+      if (currentRoom.players.length === 0) {
+        delete rooms[currentRoom.roomCode];
+      } else {
+        updateRoomRoster(currentRoom);
+      }
+
+      broadcastRoomList();
       socket.leave(currentRoom.roomCode);
       currentRoom = null;
     }
   });
 
   socket.on('startGame', () => {
-    if (currentRoom && socket.id === currentRoom.hostId) {
+    if (currentRoom && socket.id === currentRoom.hostId && !currentRoom.sessionStopped) {
       startRoundLogic(currentRoom);
     }
   });
@@ -575,8 +694,7 @@ io.on('connection', (socket) => {
       setTimeout(() => broadcastRoomState(currentRoom), 600);
       declareWin(currentRoom, stealData.playerIdx, false);
     } else {
-      currentRoom.actionLog = `${currentRoom.playerNames[stealData.playerIdx]} passed on stealing. Game continues!`;
-      currentRoom.turn = (currentRoom.turn + 1) % 4;
+      currentRoom.turn = (stealData.discarderIdx + 1) % 4;
       processTurn(currentRoom);
     }
   });
@@ -584,10 +702,9 @@ io.on('connection', (socket) => {
   socket.on('playerDraw', () => {
     if (!currentRoom) return;
     let pSeat = playerObj.seat;
-    if (pSeat !== currentRoom.turn || currentRoom.hands[pSeat].length >= 8 || currentRoom.gameEnded || currentRoom.isDealing) return;
-    
-    resetTurnTimer(currentRoom);
 
+    if (pSeat !== currentRoom.turn || currentRoom.hands[pSeat].length !== 7 || currentRoom.gameEnded || currentRoom.isDealing) return;
+    
     if (currentRoom.deck.length > 0) {
       let c = currentRoom.deck.pop();
       currentRoom.hands[pSeat].push(c);
@@ -608,9 +725,8 @@ io.on('connection', (socket) => {
   socket.on('playerTakeDiscard', () => {
     if (!currentRoom) return;
     let pSeat = playerObj.seat;
-    if (pSeat !== currentRoom.turn || currentRoom.discardPile.length === 0 || currentRoom.gameEnded || currentRoom.isDealing) return;
 
-    resetTurnTimer(currentRoom);
+    if (pSeat !== currentRoom.turn || currentRoom.hands[pSeat].length !== 7 || currentRoom.discardPile.length === 0 || currentRoom.gameEnded || currentRoom.isDealing) return;
 
     let c = currentRoom.discardPile.pop();
     currentRoom.hands[pSeat].push(c);
@@ -628,13 +744,12 @@ io.on('connection', (socket) => {
   socket.on('discardCard', (cardIndex) => {
     if (!currentRoom) return;
     let pSeat = playerObj.seat;
+
     if (pSeat !== currentRoom.turn || currentRoom.hands[pSeat].length !== 8 || currentRoom.gameEnded || currentRoom.isDealing) return;
     
-    clearAfkTimers(currentRoom);
-
     let cardToDiscard = currentRoom.hands[pSeat][cardIndex];
 
-    if (currentRoom.takeCooldown[pSeat] === cardToDiscard.value) {
+    if (currentRoom.isHuman[pSeat] && currentRoom.takeCooldown[pSeat] === cardToDiscard.value) {
       socket.emit('privateRuleAlert', `❌ Cooldown Rule: You took rank ${cardToDiscard.value} from DISCARD! You cannot discard rank ${cardToDiscard.value} on the same turn.`);
       return;
     }
@@ -653,18 +768,24 @@ io.on('connection', (socket) => {
       currentRoom.turn = (currentRoom.turn + 1) % 4;
       setTimeout(() => {
         processTurn(currentRoom);
-      }, 700);
+      }, 600);
     }
   });
 
   socket.on('disconnect', () => {
     if (currentRoom) {
-      clearAfkTimers(currentRoom);
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
       if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
         currentRoom.hostId = currentRoom.players[0].id;
       }
-      updateRoomRoster(currentRoom);
+      
+      if (currentRoom.players.length === 0) {
+        delete rooms[currentRoom.roomCode];
+      } else {
+        updateRoomRoster(currentRoom);
+      }
+
+      broadcastRoomList();
     }
   });
 });
