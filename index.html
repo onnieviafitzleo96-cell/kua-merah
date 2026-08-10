@@ -148,7 +148,7 @@
       margin-right: 0;
     }
 
-    /* Side Bots Hand Container (Compact 2-Column Grid to prevent hitting bottom) */
+    /* Side Bots Hand Container */
     .side-hand-container {
       display: flex;
       flex-wrap: wrap;
@@ -164,7 +164,7 @@
       width: 36px !important;
       height: 52px !important;
       margin-right: 2px;
-      margin-bottom: -28px; /* Compact vertical stack */
+      margin-bottom: -28px;
     }
     .side-hand-container .poker-card:nth-child(2n) {
       margin-right: 0;
@@ -514,7 +514,7 @@
     let selectedCardIndex = -1;
     let isSessionStopped = false;
 
-    // Track newly drawn card for yellow glow indicator
+    // Track newly drawn card for yellow glow indicator (1 second)
     let lastHandCards = [];
     let newlyDrawnCardId = null;
     let newlyDrawnTimer = null;
@@ -1179,10 +1179,10 @@
       document.getElementById('actionLog').innerText = state.actionLog;
       document.getElementById('deck-count').innerText = state.deck.length;
 
-      // Track newly drawn card for yellow highlight (2 seconds)
+      // Track newly drawn card for yellow highlight (1 second, excluded during initial distribution)
       if (state.hands && state.hands[mySeat]) {
         let currentHand = state.hands[mySeat];
-        if (lastHandCards.length === 7 && currentHand.length === 8 && state.turn === mySeat) {
+        if (lastHandCards.length === 7 && currentHand.length === 8 && state.turn === mySeat && !state.isDealing) {
           let prevIds = lastHandCards.map(c => c ? c.id : '');
           let newCard = currentHand.find(c => c && !prevIds.includes(c.id));
           if (newCard) {
@@ -1191,7 +1191,7 @@
             newlyDrawnTimer = setTimeout(() => {
               newlyDrawnCardId = null;
               renderPlayerHand();
-            }, 2000);
+            }, 1000);
           }
         }
         lastHandCards = [...currentHand];
