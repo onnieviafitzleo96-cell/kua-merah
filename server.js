@@ -312,7 +312,7 @@ function checkForOutOfTurnInterception(room, discarderIdx, discardedCard) {
         room.actionLog = `⚡ ${room.playerNames[targetWinner]} STOLE ${stolenCard.value}${stolenCard.suit} out of turn to WIN!`;
         io.to(room.roomCode).emit('cardSound', 'pickup');
         
-        setTimeout(() => broadcastRoomState(room), 600);
+        setTimeout(() => broadcastRoomState(room), 700);
         declareWin(room, targetWinner, false);
         return true;
       }
@@ -439,7 +439,7 @@ function runBotTurn(room, isInitialDiscard = false) {
               room.actionLog = `🎴 ${room.playerNames[currentBot]} took ${c.value}${c.suit} from DISCARD!`;
               io.to(room.roomCode).emit('cardSound', 'pickup');
               
-              setTimeout(() => broadcastRoomState(room), 600);
+              setTimeout(() => broadcastRoomState(room), 700);
 
               if (checkFourPairs(botHand)) {
                 setTimeout(() => declareWin(room, currentBot, false), 1000);
@@ -464,7 +464,7 @@ function runBotTurn(room, isInitialDiscard = false) {
           room.actionLog = `📥 ${room.playerNames[currentBot]} drew from MIDDLE DECK.`;
           io.to(room.roomCode).emit('cardSound', 'pickup');
           
-          setTimeout(() => broadcastRoomState(room), 600);
+          setTimeout(() => broadcastRoomState(room), 700);
         }
       }
 
@@ -517,11 +517,11 @@ function runBotTurn(room, isInitialDiscard = false) {
         room.turn = (room.turn + 1) % 4;
         setTimeout(() => {
           processTurn(room);
-        }, 600);
+        }, 700);
       }
-    }, 600);
+    }, 700);
 
-  }, isInitialDiscard ? 600 : 800);
+  }, isInitialDiscard ? 700 : 800);
 }
 
 function declareWin(room, playerIdx, isInstantWin) {
@@ -721,7 +721,7 @@ io.on('connection', (socket) => {
         currentRoom.actionLog = `⚡ ${currentRoom.playerNames[stealData.playerIdx]} STOLE ${stolenCard.value}${stolenCard.suit} to WIN!`;
         io.to(currentRoom.roomCode).emit('cardSound', 'pickup');
         
-        setTimeout(() => broadcastRoomState(currentRoom), 600);
+        setTimeout(() => broadcastRoomState(currentRoom), 700);
         declareWin(currentRoom, stealData.playerIdx, false);
       }
     } else {
@@ -748,7 +748,7 @@ io.on('connection', (socket) => {
         currentRoom.actionLog = `📥 ${playerObj.name} drew from MIDDLE DECK.`;
         io.to(currentRoom.roomCode).emit('cardSound', 'pickup');
 
-        setTimeout(() => broadcastRoomState(currentRoom), 600);
+        setTimeout(() => broadcastRoomState(currentRoom), 700);
       }
     } else {
       endGameNoWinner(currentRoom);
@@ -772,7 +772,7 @@ io.on('connection', (socket) => {
       currentRoom.actionLog = `🎴 ${playerObj.name} took ${c.value}${c.suit} from DISCARD pile!`;
       io.to(currentRoom.roomCode).emit('cardSound', 'pickup');
 
-      setTimeout(() => broadcastRoomState(currentRoom), 600);
+      setTimeout(() => broadcastRoomState(currentRoom), 700);
     }
   });
 
@@ -806,7 +806,7 @@ io.on('connection', (socket) => {
       currentRoom.turn = (currentRoom.turn + 1) % 4;
       setTimeout(() => {
         processTurn(currentRoom);
-      }, 600);
+      }, 700);
     }
   });
 
