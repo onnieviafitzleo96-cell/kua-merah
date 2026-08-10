@@ -8,7 +8,7 @@
   <style>
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow-x: hidden; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #072210; color: white; text-align: center; padding: 6px; touch-action: manipulation; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #072210; color: white; text-align: center; padding: 4px; touch-action: manipulation; display: flex; flex-direction: column; justify-content: flex-start; min-height: 100vh; }
     
     .splash-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #05160a; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; transition: opacity 0.8s ease; }
     .splash-title { font-size: 38px; font-weight: 900; color: #fbc02d; text-shadow: 0 0 15px rgba(251, 192, 45, 0.6); letter-spacing: 2px; }
@@ -36,14 +36,24 @@
     .rules-content ul { padding-left: 18px; margin: 6px 0; }
     .rules-content li { margin-bottom: 6px; }
 
-    .controls-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin: 4px 0; }
+    .controls-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin: 2px 0; }
 
-    .casino-table { background: radial-gradient(circle, #124d26 0%, #082913 100%); border: 5px solid #3e2723; border-radius: 16px; padding: 8px 6px; max-width: 900px; width: 100%; margin: 0 auto; box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 5px 20px rgba(0,0,0,0.7); }
-    .table-layout { display: grid; grid-template-rows: auto auto auto; gap: 6px; position: relative; width: 100%; }
-    .bot-hand { background: rgba(0,0,0,0.3); padding: 6px 2px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); min-height: 80px; width: 100%; }
+    .casino-table { background: radial-gradient(circle, #124d26 0%, #082913 100%); border: 5px solid #3e2723; border-radius: 16px; padding: 6px; max-width: 900px; width: 100%; flex: 1; margin: 0 auto; box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 5px 20px rgba(0,0,0,0.7); display: flex; flex-direction: column; justify-content: space-between; }
+    .table-layout { display: grid; grid-template-rows: auto auto auto; gap: 6px; position: relative; width: 100%; flex: 1; }
+    
+    .bot-hand { background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); width: 100%; transition: all 0.3s ease; }
+    #player-box-0 { background: rgba(255,255,255,0.08); padding: 6px 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); transition: all 0.3s ease; }
+
+    /* Active Turn Box Glow */
+    .bot-hand.active-turn, #player-box-0.active-turn {
+      border: 2px solid #fbc02d !important;
+      box-shadow: 0 0 16px rgba(251, 192, 45, 0.85) !important;
+      background: rgba(251, 192, 45, 0.18) !important;
+    }
+
     .balance { font-size: 11px; font-weight: bold; color: #fbc02d; margin-top: 1px; }
 
-    .action-banner { background: #fbc02d; color: #111; font-weight: bold; padding: 4px 10px; border-radius: 20px; display: inline-block; margin: 3px 0; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); max-width: 95%; word-break: break-word; }
+    .action-banner { background: #fbc02d; color: #111; font-weight: bold; padding: 4px 10px; border-radius: 20px; display: inline-block; margin: 2px 0; font-size: 11px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); max-width: 95%; word-break: break-word; }
 
     .middle-row { display: flex; justify-content: space-between; align-items: stretch; gap: 4px; width: 100%; }
     .side-bot { width: 31%; min-width: 0; }
@@ -51,16 +61,16 @@
     .center-content-wrap { display: flex; justify-content: space-evenly; align-items: center; width: 100%; }
     .center-col { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 50%; gap: 2px; min-width: 0; }
     
-    .table-watermark { font-size: 9px; font-weight: 900; color: rgba(251, 192, 45, 0.35); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; user-select: none; }
+    .table-watermark { font-size: 9px; font-weight: 900; color: rgba(251, 192, 45, 0.35); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; user-select: none; }
     .pile-label { font-size: 10px; font-weight: bold; margin-bottom: 2px; white-space: nowrap; }
     .deck-count-label { font-size: 10px; font-weight: normal; color: white; min-height: 14px; }
-    .empty-label { line-height: 62px; color: #aaa; font-size: 9px; }
+    .empty-label { line-height: 60px; color: #aaa; font-size: 9px; }
 
     /* Card Base Styling */
     .poker-card {
       display: inline-block;
-      width: 44px;
-      height: 64px;
+      width: 42px;
+      height: 60px;
       background: #ffffff;
       color: #111111;
       border-radius: 4px;
@@ -84,16 +94,16 @@
     .poker-card .corner .rank { font-size: 11px; display: block; font-family: "Arial", sans-serif; font-weight: 900; letter-spacing: -1px; }
     .poker-card .corner .suit-mini { font-size: 8px; display: block; margin-top: -1px; }
 
-    .poker-card .center-graphics { position: absolute; top: 12px; bottom: 12px; left: 4px; right: 4px; display: flex; justify-content: center; align-items: center; }
-    .poker-card .center-graphics.single-pip { font-size: 22px; }
+    .poker-card .center-graphics { position: absolute; top: 10px; bottom: 10px; left: 3px; right: 3px; display: flex; justify-content: center; align-items: center; }
+    .poker-card .center-graphics.single-pip { font-size: 20px; }
 
     .poker-card .face-card-art {
-      position: absolute; top: 10px; bottom: 10px; left: 4px; right: 4px;
+      position: absolute; top: 8px; bottom: 8px; left: 3px; right: 3px;
       border: 1px solid currentColor; border-radius: 2px; background: rgba(0,0,0,0.02);
       display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 1px;
     }
-    .poker-card .face-card-art .face-head { font-size: 15px; line-height: 1; }
-    .poker-card .face-card-art .face-title { font-family: "Arial", sans-serif; font-size: 6px; font-weight: 900; letter-spacing: 0.5px; }
+    .poker-card .face-card-art .face-head { font-size: 13px; line-height: 1; }
+    .poker-card .face-card-art .face-title { font-family: "Arial", sans-serif; font-size: 5.5px; font-weight: 900; letter-spacing: 0.5px; }
 
     .poker-card.back {
       background-color: #b71c1c;
@@ -101,6 +111,14 @@
       background-size: 5px 5px; background-position: 0 0, 2.5px 2.5px;
       border: 2px solid #ffffff !important;
       box-shadow: 1px 2px 5px rgba(0,0,0,0.7);
+    }
+
+    /* Newly Drawn Card Yellow Indicator */
+    .poker-card.newly-drawn {
+      border: 3px solid #ffeb3b !important;
+      box-shadow: 0 0 16px #ffeb3b, inset 0 0 8px rgba(255, 235, 59, 0.6) !important;
+      transform: translateY(-12px) scale(1.08) !important;
+      z-index: 180 !important;
     }
 
     .flying-card {
@@ -111,7 +129,7 @@
       box-shadow: 0 12px 30px rgba(0,0,0,0.85);
     }
 
-    .discard-container { position: relative; width: 44px; height: 64px; margin: 0 auto; }
+    .discard-container { position: relative; width: 42px; height: 60px; margin: 0 auto; }
     .discard-container .poker-card { position: absolute; top: 0; left: 0; }
 
     /* Top Bot Hand Container (~70% Horizontal Overlap) */
@@ -119,52 +137,64 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 4px 0;
-      min-height: 70px;
+      padding: 2px 0;
+      min-height: 62px;
       width: 100%;
     }
     .top-hand-container .poker-card {
-      margin-right: -30px; /* ~70% overlap for 44px card */
+      margin-right: -28px;
     }
     .top-hand-container .poker-card:last-child {
       margin-right: 0;
     }
 
-    /* Side Bots Hand Container (2-Column Vertical Overlap) */
+    /* Side Bots Hand Container (Compact 2-Column Grid to prevent hitting bottom) */
     .side-hand-container {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
       align-content: flex-start;
       width: 100%;
-      max-width: 95px;
+      max-width: 80px;
       margin: 0 auto;
-      padding: 4px 0;
-      min-height: 130px;
+      padding: 2px 0;
+      min-height: 100px;
     }
     .side-hand-container .poker-card {
-      margin-right: 3px;
-      margin-bottom: -32px; /* Vertical overlap downwards */
+      width: 36px !important;
+      height: 52px !important;
+      margin-right: 2px;
+      margin-bottom: -28px; /* Compact vertical stack */
     }
     .side-hand-container .poker-card:nth-child(2n) {
       margin-right: 0;
     }
+    .side-hand-container .poker-card .corner .rank { font-size: 9px; }
+    .side-hand-container .poker-card .corner .suit-mini { font-size: 7px; }
+    .side-hand-container .poker-card .center-graphics.single-pip { font-size: 16px; }
 
-    /* Human Player Hand Container (~50% Arc Fan Overlap) */
+    /* Human Player Hand Container (Larger 52x76px cards, Arc Fan Style) */
     .hand-fan-container {
       display: flex;
       justify-content: center;
       align-items: flex-end;
-      padding: 16px 0 6px 0;
-      min-height: 82px;
+      padding: 16px 0 4px 0;
+      min-height: 85px;
       width: 100%;
     }
-    .hand-fan-container .poker-card {
-      margin-right: -22px; /* ~50% overlap for 44px card */
+    #hand-0 .poker-card {
+      width: 52px !important;
+      height: 76px !important;
+      margin-right: -24px;
     }
-    .hand-fan-container .poker-card:last-child {
+    #hand-0 .poker-card:last-child {
       margin-right: 0;
     }
+    #hand-0 .poker-card .corner .rank { font-size: 13px; }
+    #hand-0 .poker-card .corner .suit-mini { font-size: 10px; }
+    #hand-0 .poker-card .center-graphics.single-pip { font-size: 26px; }
+    #hand-0 .poker-card .face-card-art .face-head { font-size: 18px; }
+    #hand-0 .poker-card .face-card-art .face-title { font-size: 7px; }
 
     .poker-card.selected-to-discard {
       border: 2px solid #fbc02d !important;
@@ -192,17 +222,6 @@
     .ledger-player-box h4 { margin: 0 0 4px 0; font-size: 12px; display: flex; justify-content: space-between; }
     .ledger-player-box ul { margin: 0; padding-left: 16px; font-size: 11px; color: #ccc; }
     .ledger-player-box li { margin-bottom: 2px; }
-
-    /* Ultra-Small Phones (< 360px) */
-    @media (max-width: 360px) {
-      .poker-card { width: 38px; height: 56px; }
-      .top-hand-container .poker-card { margin-right: -26px; }
-      .side-hand-container { max-width: 82px; }
-      .side-hand-container .poker-card { margin-bottom: -28px; }
-      .hand-fan-container .poker-card { margin-right: -19px; }
-      .discard-container { width: 38px; height: 56px; }
-      .empty-label { line-height: 54px; font-size: 8px; }
-    }
   </style>
 </head>
 <body>
@@ -407,7 +426,7 @@
     </div>
   </div>
 
-  <h1 style="margin: 2px 0; font-size:22px;">Kua Merah</h1>
+  <h1 style="margin: 1px 0; font-size:20px;">Kua Merah</h1>
   <div class="controls-bar">
     <button id="startMatchBtn" onclick="startGame()">Start Game</button>
     <button id="claimWinBtn" class="claim-win-btn" onclick="openDeclareModal()" style="display:none;">🏆 DECLARE WIN (4 PAIRS)</button>
@@ -420,13 +439,13 @@
   </div>
   
   <div><span id="actionLog" class="action-banner">Join a room tier to begin.</span></div>
-  <h2 id="status" style="margin: 2px 0; font-size: 15px;">Ready</h2>
+  <h2 id="status" style="margin: 2px 0; font-size: 14px;">Ready</h2>
 
   <div class="casino-table">
     <div class="table-layout">
       <!-- Top Bot -->
       <div id="player-box-2" class="bot-hand">
-        <h3 id="name-2" style="margin:1px; font-size:13px;">Player 3</h3>
+        <h3 id="name-2" style="margin:1px; font-size:12px;">Player 3</h3>
         <div id="bal-2" class="balance">$10.00</div>
         <div id="hand-2" class="top-hand-container"></div>
       </div>
@@ -435,7 +454,7 @@
       <div class="middle-row">
         <!-- Left Bot -->
         <div id="player-box-3" class="bot-hand side-bot">
-          <h3 id="name-3" style="margin:1px; font-size:13px;">Player 4</h3>
+          <h3 id="name-3" style="margin:1px; font-size:12px;">Player 4</h3>
           <div id="bal-3" class="balance">$10.00</div>
           <div id="hand-3" class="side-hand-container"></div>
         </div>
@@ -465,14 +484,14 @@
 
         <!-- Right Bot -->
         <div id="player-box-1" class="bot-hand side-bot">
-          <h3 id="name-1" style="margin:1px; font-size:13px;">Player 2</h3>
+          <h3 id="name-1" style="margin:1px; font-size:12px;">Player 2</h3>
           <div id="bal-1" class="balance">$10.00</div>
           <div id="hand-1" class="side-hand-container"></div>
         </div>
       </div>
 
       <!-- Human Player -->
-      <div id="player-box-0" style="background: rgba(255,255,255,0.08); padding: 6px 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2);">
+      <div id="player-box-0">
         <h3 id="name-0" style="margin:1px; font-size:13px;">You</h3>
         <div id="bal-0" class="balance">$10.00</div>
         <div id="hand-0" class="hand-fan-container"></div>
@@ -494,6 +513,11 @@
     let lastActiveTime = Date.now();
     let selectedCardIndex = -1;
     let isSessionStopped = false;
+
+    // Track newly drawn card for yellow glow indicator
+    let lastHandCards = [];
+    let newlyDrawnCardId = null;
+    let newlyDrawnTimer = null;
 
     window.addEventListener('DOMContentLoaded', () => {
       let savedName = localStorage.getItem('kua_merah_name');
@@ -1066,6 +1090,11 @@
       let clickAttr = isClickable ? `onclick="handleCardClick(${index})"` : '';
       
       let transformStyle = '';
+
+      // Yellow indicator for newly drawn card
+      if (card && card.id === newlyDrawnCardId) {
+        colorClass += ' newly-drawn';
+      }
       
       if (isDiscardPile && card) {
         let rot = card.rotation || 0;
@@ -1149,6 +1178,37 @@
       document.getElementById('status').innerText = state.status;
       document.getElementById('actionLog').innerText = state.actionLog;
       document.getElementById('deck-count').innerText = state.deck.length;
+
+      // Track newly drawn card for yellow highlight (2 seconds)
+      if (state.hands && state.hands[mySeat]) {
+        let currentHand = state.hands[mySeat];
+        if (lastHandCards.length === 7 && currentHand.length === 8 && state.turn === mySeat) {
+          let prevIds = lastHandCards.map(c => c ? c.id : '');
+          let newCard = currentHand.find(c => c && !prevIds.includes(c.id));
+          if (newCard) {
+            newlyDrawnCardId = newCard.id;
+            if (newlyDrawnTimer) clearTimeout(newlyDrawnTimer);
+            newlyDrawnTimer = setTimeout(() => {
+              newlyDrawnCardId = null;
+              renderPlayerHand();
+            }, 2000);
+          }
+        }
+        lastHandCards = [...currentHand];
+      }
+
+      // Highlight active player's turn box
+      for (let sIdx = 0; sIdx < 4; sIdx++) {
+        let domIdx = mapSeatToDomIndex(sIdx);
+        let boxEl = document.getElementById(`player-box-${domIdx}`);
+        if (boxEl) {
+          if (state.turn === sIdx && !state.gameEnded) {
+            boxEl.classList.add('active-turn');
+          } else {
+            boxEl.classList.remove('active-turn');
+          }
+        }
+      }
 
       if (state.balances && state.balances[mySeat] !== undefined) {
         myPersistentBalance = state.balances[mySeat];
