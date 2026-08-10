@@ -103,6 +103,7 @@ function getOrCreateRoom(roomCode, isSolo) {
       status: 'Ready to play.',
       actionLog: `Room ${roomCode} ready!`,
       botPool: shuffledBots,
+      botDifficulty: 'normal',
       playerNames: ['Bot 1', 'Bot 2', 'Bot 3', 'Bot 4'],
       isHuman: [false, false, false, false],
       balances: [10.00, 10.00, 10.00, 10.00],
@@ -137,6 +138,7 @@ function getCleanRoomState(room) {
     playerNames: room.playerNames,
     isHuman: room.isHuman,
     balances: room.balances,
+    botDifficulty: room.isSolo ? room.botDifficulty : 'normal',
     gameEnded: room.gameEnded,
     sessionStopped: room.sessionStopped,
     revealStage: room.revealStage,
@@ -303,6 +305,12 @@ function checkForOutOfTurnInterception(room, discarderIdx, discardedCard) {
       io.to(room.roomCode).emit('promptSteal', { playerIdx: targetWinner, card: discardedCard, name: room.playerNames[discarderIdx] });
       return true;
     } else {
+      let effectiveDiff = room.isSolo ? room.botDifficulty : 'normal';
+
+      if (effectiveDiff === 'easy' && Math.random() > 0.3) {
+        return false;
+      }
+
       let stolenCard = room.discardPile.pop();
       if (stolenCard) {
         room.hands[targetWinner].push(stolenCard);
@@ -312,7 +320,8 @@ function checkForOutOfTurnInterception(room, discarderIdx, discardedCard) {
         room.actionLog = `⚡ ${room.playerNames[targetWinner]} STOLE ${stolenCard.value}${stolenCard.suit} out of turn to WIN!`;
         io.to(room.roomCode).emit('cardSound', 'pickup');
         
-        setTimeout(() => broadcastRoomState(room), 700);
+        let stepDelay = effectiveDiff === 'hard' ? 400 : 700;
+        setTimeout(() => broadcastRoomState(room), stepDelay);
         declareWin(room, targetWinner, false);
         return true;
       }
@@ -372,7 +381,9 @@ function startRoundLogic(room) {
 
   let starterIdx = room.lastWinnerIdx;
   room.turn = starterIdx;
-  room.actionLog = `Round ${room.roundCount} - $${room.roomTier} Tier - ${room.playerNames[starterIdx]} starts!`;
+  
+  let diffLabel = room.isSolo ? ` (${room.botDifficulty.toUpperCase()})` : '';
+  room.actionLog = `Round ${room.roundCount} - $${room.roomTier} Tier${diffLabel} - ${room.playerNames[starterIdx]} starts!`;
   room.status = `Turn: ${room.playerNames[starterIdx]}`;
 
   setTimeout(() => {
@@ -415,6 +426,9 @@ function runBotTurn(room, isInitialDiscard = false) {
   let botHand = room.hands[currentBot];
   if (!botHand || botHand.length === 0) return;
 
+  let effectiveDiff = room.isSolo ? room.botDifficulty : 'normal';
+  let turnDelay = effectiveDiff === 'hard' ? 400 : 700;
+
   setTimeout(() => {
     if (room.gameEnded || room.turn !== currentBot) return;
 
@@ -428,7 +442,9 @@ function runBotTurn(room, isInitialDiscard = false) {
           let testHand = [...botHand, topDiscard];
           let completesWin = checkFourPairs(testHand);
 
-          if (cardCountInHand === 1 || completesWin) {
+          let willTake = effectiveDiff === 'easy' ? Math.random() < 0.5 : true;
+
+          if (willTake && (cardCountInHand === 1 || completesWin)) {
             let c = room.discardPile.pop();
             if (c) {
               botHand.push(c);
@@ -439,10 +455,10 @@ function runBotTurn(room, isInitialDiscard = false) {
               room.actionLog = `🎴 ${room.playerNames[currentBot]} took ${c.value}${c.suit} from DISCARD!`;
               io.to(room.roomCode).emit('cardSound', 'pickup');
               
-              setTimeout(() => broadcastRoomState(room), 700);
+              setTimeout(() => broadcastRoomState(room), turnDelay);
 
               if (checkFourPairs(botHand)) {
-                setTimeout(() => declareWin(room, currentBot, false), 1000);
+                setTimeout(() => declareWin(room, currentBot, false), turnDelay);
                 return;
               }
             }
@@ -464,12 +480,12 @@ function runBotTurn(room, isInitialDiscard = false) {
           room.actionLog = `📥 ${room.playerNames[currentBot]} drew from MIDDLE DECK.`;
           io.to(room.roomCode).emit('cardSound', 'pickup');
           
-          setTimeout(() => broadcastRoomState(room), 700);
+          setTimeout(() => broadcastRoomState(room), turnDelay);
         }
       }
 
       if (checkFourPairs(botHand)) {
-        setTimeout(() => declareWin(room, currentBot, false), 1000);
+        setTimeout(() => declareWin(room, currentBot, false), turnDelay);
         return;
       }
     }
@@ -477,25 +493,62 @@ function runBotTurn(room, isInitialDiscard = false) {
     setTimeout(() => {
       if (room.gameEnded || room.turn !== currentBot || botHand.length === 0) return;
 
-      let rankCounts = {};
-      for (let c of botHand) {
-        if (c) rankCounts[c.value] = (rankCounts[c.value] || 0) + 1;
-      }
-
-      let triplets = botHand.filter(c => c && rankCounts[c.value] === 3);
-      let singletons = botHand.filter(c => c && rankCounts[c.value] === 1);
-
       let cardToDiscard = null;
-      if (triplets.length > 0) {
-        cardToDiscard = triplets[0];
-      } else if (singletons.length > 0) {
-        singletons.sort((a, b) => a.points - b.points);
-        cardToDiscard = singletons[0];
-      } else {
-        cardToDiscard = botHand[0];
+
+      if (effectiveDiff === 'easy') {
+        cardToDiscard = botHand[Math.floor(Math.random() * botHand.length)];
+      }
+      else if (effectiveDiff === 'hard') {
+        let rankCounts = {};
+        for (let c of botHand) {
+          if (c) rankCounts[c.value] = (rankCounts[c.value] || 0) + 1;
+        }
+
+        let singletons = botHand.filter(c => c && rankCounts[c.value] === 1);
+
+        if (singletons.length > 0) {
+          singletons.sort((a, b) => {
+            let scoreA = 0, scoreB = 0;
+            if (!a.isRed) scoreA += 10;
+            if (!b.isRed) scoreB += 10;
+
+            scoreA += (10 - a.points);
+            scoreB += (10 - b.points);
+
+            if (a.isRed && a.value === '10') scoreA -= 25;
+            if (b.isRed && b.value === '10') scoreB -= 25;
+            if (a.isRed && a.value === 'A') scoreA -= 20;
+            if (b.isRed && b.value === 'A') scoreB -= 20;
+
+            return scoreB - scoreA;
+          });
+          cardToDiscard = singletons[0];
+        } else {
+          let triplets = botHand.filter(c => c && rankCounts[c.value] === 3);
+          if (triplets.length > 0) cardToDiscard = triplets[0];
+          else cardToDiscard = botHand[0];
+        }
+      }
+      else {
+        let rankCounts = {};
+        for (let c of botHand) {
+          if (c) rankCounts[c.value] = (rankCounts[c.value] || 0) + 1;
+        }
+
+        let triplets = botHand.filter(c => c && rankCounts[c.value] === 3);
+        let singletons = botHand.filter(c => c && rankCounts[c.value] === 1);
+
+        if (triplets.length > 0) {
+          cardToDiscard = triplets[0];
+        } else if (singletons.length > 0) {
+          singletons.sort((a, b) => a.points - b.points);
+          cardToDiscard = singletons[0];
+        } else {
+          cardToDiscard = botHand[0];
+        }
       }
 
-      if (!cardToDiscard) return;
+      if (!cardToDiscard) cardToDiscard = botHand[0];
 
       let discardIndex = botHand.findIndex(c => c && c.id === cardToDiscard.id);
       if (discardIndex === -1) discardIndex = 0;
@@ -517,11 +570,11 @@ function runBotTurn(room, isInitialDiscard = false) {
         room.turn = (room.turn + 1) % 4;
         setTimeout(() => {
           processTurn(room);
-        }, 700);
+        }, turnDelay);
       }
-    }, 700);
+    }, turnDelay);
 
-  }, isInitialDiscard ? 700 : 800);
+  }, isInitialDiscard ? turnDelay : turnDelay + 100);
 }
 
 function declareWin(room, playerIdx, isInstantWin) {
@@ -655,6 +708,19 @@ io.on('connection', (socket) => {
     updateRoomRoster(currentRoom);
   });
 
+  socket.on('setBotDifficulty', (diff) => {
+    if (!currentRoom) return;
+    if (currentRoom.isSolo) {
+      if (['easy', 'normal', 'hard'].includes(diff)) {
+        currentRoom.botDifficulty = diff;
+        broadcastRoomState(currentRoom);
+      }
+    } else {
+      currentRoom.botDifficulty = 'normal';
+      broadcastRoomState(currentRoom);
+    }
+  });
+
   socket.on('getLedgerHistory', () => {
     if (!currentRoom) return;
     let data = calculateSettlements(currentRoom);
@@ -721,7 +787,9 @@ io.on('connection', (socket) => {
         currentRoom.actionLog = `⚡ ${currentRoom.playerNames[stealData.playerIdx]} STOLE ${stolenCard.value}${stolenCard.suit} to WIN!`;
         io.to(currentRoom.roomCode).emit('cardSound', 'pickup');
         
-        setTimeout(() => broadcastRoomState(currentRoom), 700);
+        let effectiveDiff = currentRoom.isSolo ? currentRoom.botDifficulty : 'normal';
+        let stepDelay = effectiveDiff === 'hard' ? 400 : 700;
+        setTimeout(() => broadcastRoomState(currentRoom), stepDelay);
         declareWin(currentRoom, stealData.playerIdx, false);
       }
     } else {
@@ -748,7 +816,9 @@ io.on('connection', (socket) => {
         currentRoom.actionLog = `📥 ${playerObj.name} drew from MIDDLE DECK.`;
         io.to(currentRoom.roomCode).emit('cardSound', 'pickup');
 
-        setTimeout(() => broadcastRoomState(currentRoom), 700);
+        let effectiveDiff = currentRoom.isSolo ? currentRoom.botDifficulty : 'normal';
+        let stepDelay = effectiveDiff === 'hard' ? 400 : 700;
+        setTimeout(() => broadcastRoomState(currentRoom), stepDelay);
       }
     } else {
       endGameNoWinner(currentRoom);
@@ -772,7 +842,9 @@ io.on('connection', (socket) => {
       currentRoom.actionLog = `🎴 ${playerObj.name} took ${c.value}${c.suit} from DISCARD pile!`;
       io.to(currentRoom.roomCode).emit('cardSound', 'pickup');
 
-      setTimeout(() => broadcastRoomState(currentRoom), 700);
+      let effectiveDiff = currentRoom.isSolo ? currentRoom.botDifficulty : 'normal';
+      let stepDelay = effectiveDiff === 'hard' ? 400 : 700;
+      setTimeout(() => broadcastRoomState(currentRoom), stepDelay);
     }
   });
 
@@ -804,9 +876,11 @@ io.on('connection', (socket) => {
 
     if (!intercepted) {
       currentRoom.turn = (currentRoom.turn + 1) % 4;
+      let effectiveDiff = currentRoom.isSolo ? currentRoom.botDifficulty : 'normal';
+      let stepDelay = effectiveDiff === 'hard' ? 400 : 700;
       setTimeout(() => {
         processTurn(currentRoom);
-      }, 700);
+      }, stepDelay);
     }
   });
 

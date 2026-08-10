@@ -27,7 +27,7 @@
     .name-input { width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #fbc02d; background: #072210; color: white; font-size: 15px; font-weight: bold; text-align: center; margin-bottom: 10px; }
     .name-input:focus { outline: none; border-color: #ffd54f; }
 
-    .tier-select { width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #fbc02d; background: #072210; color: #fbc02d; font-size: 13px; font-weight: bold; text-align: center; margin: 8px 0 12px 0; cursor: pointer; }
+    .tier-select { width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #fbc02d; background: #072210; color: #fbc02d; font-size: 13px; font-weight: bold; text-align: center; margin: 6px 0 10px 0; cursor: pointer; }
 
     .rules-btn { width: 100%; padding: 8px; background: rgba(251, 192, 45, 0.2); border: 1.5px dashed #fbc02d; color: #fbc02d; font-weight: bold; border-radius: 8px; margin-bottom: 12px; cursor: pointer; font-size: 13px; }
     .rules-btn:hover { background: rgba(251, 192, 45, 0.35); }
@@ -132,7 +132,7 @@
     .discard-container { position: relative; width: 42px; height: 60px; margin: 0 auto; }
     .discard-container .poker-card { position: absolute; top: 0; left: 0; }
 
-    /* Top Bot Hand Container (~70% Horizontal Overlap) */
+    /* Top Bot Hand Container */
     .top-hand-container {
       display: flex;
       justify-content: center;
@@ -173,7 +173,7 @@
     .side-hand-container .poker-card .corner .suit-mini { font-size: 7px; }
     .side-hand-container .poker-card .center-graphics.single-pip { font-size: 16px; }
 
-    /* Human Player Hand Container (Larger 52x76px cards, Arc Fan Style) */
+    /* Human Player Hand Container */
     .hand-fan-container {
       display: flex;
       justify-content: center;
@@ -276,6 +276,16 @@
 
         <p id="roomInstructionText" style="font-size:12px; margin-bottom: 4px;">Your Room Code (Share with friends):</p>
         <input type="text" id="roomCodeInput" class="name-input" placeholder="ENTER CODE" value="KUA88" maxlength="10" style="text-transform: uppercase;">
+      </div>
+
+      <!-- Difficulty Selector (Solo Mode Only) -->
+      <div id="botDifficultyContainer">
+        <p style="font-size:12px; margin-bottom: 4px; margin-top: 8px;">Select AI Bot Difficulty:</p>
+        <select id="botDifficultySelect" class="tier-select" onchange="updateBotDifficulty(this.value)">
+          <option value="easy">🟢 Easy (Casual & Random Discards)</option>
+          <option value="normal" selected>🟡 Normal (Balanced Strategy)</option>
+          <option value="hard">🔴 Hard (Strategic & Defensive)</option>
+        </select>
       </div>
 
       <p style="font-size:12px; margin-bottom: 4px; margin-top: 8px;">Select Room Tier & Multiplier:</p>
@@ -543,6 +553,10 @@
       let headerEl = document.getElementById('welcomeGreetingHeader');
       let cleanName = name.trim() !== '' ? name.trim() : 'Player';
       headerEl.innerText = `Welcome, ${cleanName}! 👋`;
+    }
+
+    function updateBotDifficulty(val) {
+      socket.emit('setBotDifficulty', val);
     }
 
     socket.on('roomListUpdate', (roomList) => {
@@ -931,6 +945,13 @@
       document.getElementById('soloModeBtn').className = isSolo ? 'mode-btn active' : 'mode-btn';
       document.getElementById('friendsModeBtn').className = isSolo ? 'mode-btn' : 'mode-btn active';
       document.getElementById('roomCodeContainer').style.display = isSolo ? 'none' : 'block';
+      
+      // Difficulty dropdown visible ONLY in Solo Mode
+      document.getElementById('botDifficultyContainer').style.display = isSolo ? 'block' : 'none';
+      if (!isSolo) {
+        document.getElementById('botDifficultySelect').value = 'normal';
+        socket.emit('setBotDifficulty', 'normal');
+      }
     }
 
     function setRoomAction(action) {
@@ -1000,6 +1021,7 @@
       }
 
       let roomCode = document.getElementById('roomCodeInput').value;
+      let diffVal = isSoloMode ? document.getElementById('botDifficultySelect').value : 'normal';
 
       isSessionStopped = false;
       let btn = document.getElementById('sessionControlBtn');
@@ -1008,6 +1030,7 @@
 
       socket.emit('joinRoom', { name: customName, roomCode: roomCode, isSolo: isSoloMode, currentBalance: myPersistentBalance });
       socket.emit('setRoomTier', selectedTier);
+      socket.emit('setBotDifficulty', diffVal);
 
       document.getElementById('startModal').style.display = 'none';
     }
@@ -1015,7 +1038,6 @@
     socket.on('joinedRoomSuccess', (data) => {
       mySeat = data.seat;
       isHost = data.isHost;
-      document.getElementById('watermarkLabel').innerText = isSoloMode ? '♠ SOLO ROOM ♥' : `♠ ROOM: ${data.roomCode} ♥`;
     });
 
     socket.on('privateRuleAlert', (msg) => {
@@ -1091,7 +1113,6 @@
       
       let transformStyle = '';
 
-      // Yellow indicator for newly drawn card
       if (card && card.id === newlyDrawnCardId) {
         colorClass += ' newly-drawn';
       }
@@ -1179,7 +1200,9 @@
       document.getElementById('actionLog').innerText = state.actionLog;
       document.getElementById('deck-count').innerText = state.deck.length;
 
-      // Track newly drawn card for yellow highlight (0.2s, excluded during initial distribution)
+      let watermarkText = state.isSolo ? `♠ SOLO ROOM (${(state.botDifficulty || 'normal').toUpperCase()}) ♥` : `♠ ROOM: ${state.roomCode} ♥`;
+      document.getElementById('watermarkLabel').innerText = watermarkText;
+
       if (state.hands && state.hands[mySeat]) {
         let currentHand = state.hands[mySeat];
         if (lastHandCards.length === 7 && currentHand.length === 8 && state.turn === mySeat && !state.isDealing) {
@@ -1197,7 +1220,6 @@
         lastHandCards = [...currentHand];
       }
 
-      // Highlight active player's turn box
       for (let sIdx = 0; sIdx < 4; sIdx++) {
         let domIdx = mapSeatToDomIndex(sIdx);
         let boxEl = document.getElementById(`player-box-${domIdx}`);
