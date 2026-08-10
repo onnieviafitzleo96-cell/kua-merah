@@ -280,11 +280,11 @@
 
       <!-- Difficulty Selector (Solo Mode Only) -->
       <div id="botDifficultyContainer">
-        <p style="font-size:12px; margin-bottom: 4px; margin-top: 8px;">Select AI Bot Difficulty:</p>
+        <p style="font-size:12px; margin-bottom: 4px; margin-top: 8px;">Select Game Difficulty:</p>
         <select id="botDifficultySelect" class="tier-select" onchange="updateBotDifficulty(this.value)">
-          <option value="easy">🟢 Easy (Casual & Random Discards)</option>
-          <option value="normal" selected>🟡 Normal (Balanced Strategy)</option>
-          <option value="hard">🔴 Hard (Strategic & Defensive)</option>
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
         </select>
       </div>
 
@@ -946,7 +946,6 @@
       document.getElementById('friendsModeBtn').className = isSolo ? 'mode-btn' : 'mode-btn active';
       document.getElementById('roomCodeContainer').style.display = isSolo ? 'none' : 'block';
       
-      // Difficulty dropdown visible ONLY in Solo Mode
       document.getElementById('botDifficultyContainer').style.display = isSolo ? 'block' : 'none';
       if (!isSolo) {
         document.getElementById('botDifficultySelect').value = 'normal';
