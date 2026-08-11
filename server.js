@@ -8,6 +8,16 @@ app.use(express.static(__dirname));
 const BOT_NAMES = ['Oliver', 'Emma', 'Liam', 'Charlotte', 'Jack', 'Sophia', 'Henry', 'Amelia', 'James', 'Mia'];
 let rooms = {};
 
+// Active connection count helper
+function getActivePlayerCount() {
+  return io.of('/').sockets.size;
+}
+
+// Active active rooms helper
+function getActiveRoomCount() {
+  return Object.keys(rooms).length;
+}
+
 function createDeck() {
   const suits = ['♠', '♥', '♦', '♣'];
   const values = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
@@ -568,9 +578,11 @@ function runBotTurn(room, isInitialDiscard = false) {
 
       if (!intercepted) {
         room.turn = (room.turn + 1) % 4;
+        let effectiveDiff = room.isSolo ? room.botDifficulty : 'normal';
+        let stepDelay = effectiveDiff === 'hard' ? 400 : 700;
         setTimeout(() => {
           processTurn(room);
-        }, turnDelay);
+        }, stepDelay);
       }
     }, turnDelay);
 
@@ -659,6 +671,15 @@ function endGameNoWinner(room) {
 }
 
 io.on('connection', (socket) => {
+  // Extract client location metadata attached by Render / Reverse Proxy
+  let headers = socket.handshake.headers;
+  let clientCountry = headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || 'Unknown Country';
+  let rawIp = headers['x-forwarded-for'] || socket.handshake.address || '';
+  let clientIp = rawIp ? rawIp.split(',')[0].trim() : 'Unknown IP';
+
+  console.log(`🟢 [CONNECTED] Socket: ${socket.id} | Country: ${clientCountry} | IP: ${clientIp}`);
+  console.log(`📊 Current Active Players: ${getActivePlayerCount()} | Active Rooms: ${getActiveRoomCount()}`);
+
   let currentRoom = null;
   let playerObj = { id: socket.id, name: 'Guest', seat: -1, balance: 10.00 };
 
@@ -690,6 +711,8 @@ io.on('connection', (socket) => {
     socket.join(finalCode);
     currentRoom.players.push(playerObj);
     updateRoomRoster(currentRoom);
+
+    console.log(`🎮 [JOIN ROOM] ${playerObj.name} joined Room: ${finalCode} (Seat ${assignedSeat}) | Mode: ${isSolo ? 'Solo' : 'Multiplayer'}`);
 
     socket.emit('joinedRoomSuccess', { 
       roomCode: finalCode, 
@@ -741,6 +764,7 @@ io.on('connection', (socket) => {
 
   socket.on('leaveRoom', () => {
     if (currentRoom) {
+      console.log(`🚪 [LEFT ROOM] ${playerObj.name} left Room: ${currentRoom.roomCode}`);
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
       if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
         currentRoom.hostId = currentRoom.players[0].id;
@@ -885,6 +909,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    console.log(`🔴 [DISCONNECTED] Socket: ${socket.id}`);
     if (currentRoom) {
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
       if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
@@ -899,6 +924,7 @@ io.on('connection', (socket) => {
 
       broadcastRoomList();
     }
+    console.log(`📊 Current Active Players: ${getActivePlayerCount()} | Active Rooms: ${getActiveRoomCount()}`);
   });
 });
 
