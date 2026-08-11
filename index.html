@@ -44,7 +44,6 @@
     .bot-hand { background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); width: 100%; transition: all 0.3s ease; }
     #player-box-0 { background: rgba(255,255,255,0.08); padding: 6px 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); transition: all 0.3s ease; }
 
-    /* Active Turn Box Glow */
     .bot-hand.active-turn, #player-box-0.active-turn {
       border: 2px solid #fbc02d !important;
       box-shadow: 0 0 16px rgba(251, 192, 45, 0.85) !important;
@@ -66,7 +65,6 @@
     .deck-count-label { font-size: 10px; font-weight: normal; color: white; min-height: 14px; }
     .empty-label { line-height: 60px; color: #aaa; font-size: 9px; }
 
-    /* Card Base Styling */
     .poker-card {
       display: inline-block;
       width: 42px;
@@ -113,7 +111,6 @@
       box-shadow: 1px 2px 5px rgba(0,0,0,0.7);
     }
 
-    /* Newly Drawn Card Yellow Indicator */
     .poker-card.newly-drawn {
       border: 3px solid #ffeb3b !important;
       box-shadow: 0 0 16px #ffeb3b, inset 0 0 8px rgba(255, 235, 59, 0.6) !important;
@@ -132,7 +129,6 @@
     .discard-container { position: relative; width: 42px; height: 60px; margin: 0 auto; }
     .discard-container .poker-card { position: absolute; top: 0; left: 0; }
 
-    /* Top Bot Hand Container */
     .top-hand-container {
       display: flex;
       justify-content: center;
@@ -148,7 +144,6 @@
       margin-right: 0;
     }
 
-    /* Side Bots Hand Container */
     .side-hand-container {
       display: flex;
       flex-wrap: wrap;
@@ -173,7 +168,6 @@
     .side-hand-container .poker-card .corner .suit-mini { font-size: 7px; }
     .side-hand-container .poker-card .center-graphics.single-pip { font-size: 16px; }
 
-    /* Human Player Hand Container */
     .hand-fan-container {
       display: flex;
       justify-content: center;
@@ -529,6 +523,47 @@
     let newlyDrawnCardId = null;
     let newlyDrawnTimer = null;
 
+    // Smart AFK / Background Handler
+    function handleAppVisibilityOrResume() {
+      let inactiveDuration = Date.now() - lastActiveTime;
+
+      // AFK > 10 Minutes (600,000 ms) -> Refresh page back to Welcome screen
+      if (inactiveDuration > 600000) {
+        window.location.reload();
+      } 
+      // Short AFK (< 10 Mins) -> Re-establish Socket & Refresh Room State
+      else if (currentGameState && currentGameState.roomCode) {
+        if (!socket.connected) {
+          socket.connect();
+        }
+        socket.emit('setRoomTier', selectedTier);
+      }
+      lastActiveTime = Date.now();
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        handleAppVisibilityOrResume();
+      } else {
+        lastActiveTime = Date.now();
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      handleAppVisibilityOrResume();
+    });
+
+    window.addEventListener('pageshow', () => {
+      handleAppVisibilityOrResume();
+    });
+
+    // Background interval to catch in-app 10-minute AFK (without switching apps)
+    setInterval(() => {
+      if (Date.now() - lastActiveTime > 600000) {
+        window.location.reload();
+      }
+    }, 15000);
+
     window.addEventListener('DOMContentLoaded', () => {
       let savedName = localStorage.getItem('kua_merah_name');
       let savedBal = localStorage.getItem('kua_merah_balance');
@@ -578,23 +613,6 @@
         document.getElementById('roomCodeInput').value = val;
       }
     }
-
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        let inactiveDuration = Date.now() - lastActiveTime;
-        if (inactiveDuration > 600000) {
-          window.location.reload();
-        } else if (currentGameState && currentGameState.roomCode) {
-          socket.emit('setRoomTier', selectedTier);
-        }
-      } else {
-        lastActiveTime = Date.now();
-      }
-    });
-
-    window.addEventListener('pageshow', () => {
-      lastActiveTime = Date.now();
-    });
 
     function enableNameEdit() {
       let nameInput = document.getElementById('playerNameInput');
