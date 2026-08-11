@@ -523,15 +523,25 @@
     let newlyDrawnCardId = null;
     let newlyDrawnTimer = null;
 
-    // Smart AFK / Background Handler
+    // Touch / Activity Listener: Keeps active time fresh during live gameplay
+    function registerUserActivity() {
+      lastActiveTime = Date.now();
+    }
+
+    ['click', 'touchstart', 'keydown'].forEach(evtName => {
+      window.addEventListener(evtName, registerUserActivity, { passive: true });
+    });
+
+    // Smart Reconnection and AFK Check Handler
     function handleAppVisibilityOrResume() {
       let inactiveDuration = Date.now() - lastActiveTime;
+      let isGameRoundActive = currentGameState && !currentGameState.gameEnded;
 
-      // AFK > 10 Minutes (600,000 ms) -> Refresh page back to Welcome screen
-      if (inactiveDuration > 600000) {
+      // Only refresh if AFK > 10 mins AND round is NOT currently active
+      if (inactiveDuration > 600000 && !isGameRoundActive) {
         window.location.reload();
       } 
-      // Short AFK (< 10 Mins) -> Re-establish Socket & Refresh Room State
+      // Re-establish WebSocket connection seamlessly if briefly disconnected
       else if (currentGameState && currentGameState.roomCode) {
         if (!socket.connected) {
           socket.connect();
@@ -557,12 +567,14 @@
       handleAppVisibilityOrResume();
     });
 
-    // Background interval to catch in-app 10-minute AFK (without switching apps)
+    // Safe background check (Only reloads if player is idle in lobby/modal, never mid-round)
     setInterval(() => {
-      if (Date.now() - lastActiveTime > 600000) {
+      let inactiveDuration = Date.now() - lastActiveTime;
+      let isGameRoundActive = currentGameState && !currentGameState.gameEnded;
+      if (inactiveDuration > 600000 && !isGameRoundActive) {
         window.location.reload();
       }
-    }, 15000);
+    }, 30000);
 
     window.addEventListener('DOMContentLoaded', () => {
       let savedName = localStorage.getItem('kua_merah_name');
@@ -1097,6 +1109,7 @@
       if (isActionPending) return;
       isActionPending = true;
       selectedCardIndex = -1;
+      registerUserActivity();
       socket.emit('playerDraw');
       setTimeout(() => isActionPending = false, 500);
     }
@@ -1105,12 +1118,15 @@
       if (isActionPending) return;
       isActionPending = true;
       selectedCardIndex = -1;
+      registerUserActivity();
       socket.emit('playerTakeDiscard');
       setTimeout(() => isActionPending = false, 500);
     }
 
     function handleCardClick(idx) {
       if (isActionPending) return;
+
+      registerUserActivity();
 
       if (selectedCardIndex === idx) {
         isActionPending = true;
@@ -1212,6 +1228,7 @@
     socket.on('stateUpdate', (state) => {
       currentGameState = state;
       isActionPending = false;
+      registerUserActivity();
 
       document.getElementById('status').innerText = state.status;
       document.getElementById('actionLog').innerText = state.actionLog;

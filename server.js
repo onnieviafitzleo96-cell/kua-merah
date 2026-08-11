@@ -8,12 +8,10 @@ app.use(express.static(__dirname));
 const BOT_NAMES = ['Oliver', 'Emma', 'Liam', 'Charlotte', 'Jack', 'Sophia', 'Henry', 'Amelia', 'James', 'Mia'];
 let rooms = {};
 
-// Active connection count helper
 function getActivePlayerCount() {
   return io.of('/').sockets.size;
 }
 
-// Active active rooms helper
 function getActiveRoomCount() {
   return Object.keys(rooms).length;
 }
@@ -671,7 +669,6 @@ function endGameNoWinner(room) {
 }
 
 io.on('connection', (socket) => {
-  // Extract client location metadata attached by Render / Reverse Proxy
   let headers = socket.handshake.headers;
   let clientCountry = headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || 'Unknown Country';
   let rawIp = headers['x-forwarded-for'] || socket.handshake.address || '';
