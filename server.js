@@ -1,7 +1,10 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const io = require('socket.io')(http, {
+  pingTimeout: 30000,
+  pingInterval: 10000
+});
 
 app.use(express.static(__dirname));
 
@@ -114,7 +117,7 @@ function getOrCreateRoom(roomCode, isSolo) {
       botDifficulty: 'normal',
       playerNames: ['Bot 1', 'Bot 2', 'Bot 3', 'Bot 4'],
       isHuman: [false, false, false, false],
-      balances: [10.00, 10.00, 10.00, 10.00],
+      balances: [100.00, 100.00, 100.00, 100.00],
       gameEnded: true,
       sessionStopped: false,
       revealStage: 0,
@@ -678,17 +681,26 @@ io.on('connection', (socket) => {
   console.log(`📊 Current Active Players: ${getActivePlayerCount()} | Active Rooms: ${getActiveRoomCount()}`);
 
   let currentRoom = null;
-  let playerObj = { id: socket.id, name: 'Guest', seat: -1, balance: 10.00 };
+  let playerObj = { id: socket.id, name: 'Guest', seat: -1, balance: 100.00 };
 
   socket.emit('getRoomList');
   broadcastRoomList();
+
+  socket.on('syncPing', () => {
+    if (currentRoom) {
+      broadcastRoomState(currentRoom);
+    }
+  });
 
   socket.on('joinRoom', ({ name, roomCode, isSolo, currentBalance }) => {
     let finalCode = isSolo ? `SOLO_${socket.id.substring(0, 5)}` : (roomCode ? roomCode.trim().toUpperCase() : 'KUA88');
     
     currentRoom = getOrCreateRoom(finalCode, isSolo);
     playerObj.name = name ? name.trim() : 'Player 1';
-    playerObj.balance = (currentBalance !== undefined && currentBalance > 0) ? currentBalance : 10.00;
+    
+    // Balance reset to $100.00 if below $0
+    let balVal = (currentBalance !== undefined && parseFloat(currentBalance) > 0) ? parseFloat(currentBalance) : 100.00;
+    playerObj.balance = balVal;
 
     let occupiedSeats = currentRoom.players.map(p => p.seat);
     let assignedSeat = 0;

@@ -239,7 +239,7 @@
 
       <div style="text-align:center; margin-bottom:10px; background:rgba(251,192,45,0.15); padding:6px; border-radius:8px; border:1px solid #fbc02d;">
         <span style="font-size:12px; color:#aaa;">Your Balance: </span>
-        <span id="welcomeBalanceText" style="font-size:16px; font-weight:bold; color:#fbc02d;">$10.00</span>
+        <span id="welcomeBalanceText" style="font-size:16px; font-weight:bold; color:#fbc02d;">$100.00</span>
       </div>
       
       <button class="rules-btn" onclick="openRulesModal()">📖 How to Play & Rules</button>
@@ -340,7 +340,7 @@
 
       <div style="text-align:center; margin-top:16px; background:rgba(251,192,45,0.15); padding:8px; border-radius:8px; border:1px solid #fbc02d;">
         <span style="font-size:12px; color:#aaa;">New Balance: </span>
-        <span id="breakdownNewBalance" style="font-size:18px; font-weight:bold; color:#fbc02d;">$10.00</span>
+        <span id="breakdownNewBalance" style="font-size:18px; font-weight:bold; color:#fbc02d;">$100.00</span>
       </div>
 
       <button onclick="closeBreakdownModal()" style="width:100%; padding:10px; margin-top:12px; background:#fbc02d; color:#111; font-weight:bold; border-radius:6px; border:none; cursor:pointer;">Continue</button>
@@ -450,7 +450,7 @@
       <!-- Top Bot -->
       <div id="player-box-2" class="bot-hand">
         <h3 id="name-2" style="margin:1px; font-size:12px;">Player 3</h3>
-        <div id="bal-2" class="balance">$10.00</div>
+        <div id="bal-2" class="balance">$100.00</div>
         <div id="hand-2" class="top-hand-container"></div>
       </div>
 
@@ -459,7 +459,7 @@
         <!-- Left Bot -->
         <div id="player-box-3" class="bot-hand side-bot">
           <h3 id="name-3" style="margin:1px; font-size:12px;">Player 4</h3>
-          <div id="bal-3" class="balance">$10.00</div>
+          <div id="bal-3" class="balance">$100.00</div>
           <div id="hand-3" class="side-hand-container"></div>
         </div>
 
@@ -489,7 +489,7 @@
         <!-- Right Bot -->
         <div id="player-box-1" class="bot-hand side-bot">
           <h3 id="name-1" style="margin:1px; font-size:12px;">Player 2</h3>
-          <div id="bal-1" class="balance">$10.00</div>
+          <div id="bal-1" class="balance">$100.00</div>
           <div id="hand-1" class="side-hand-container"></div>
         </div>
       </div>
@@ -497,21 +497,27 @@
       <!-- Human Player -->
       <div id="player-box-0">
         <h3 id="name-0" style="margin:1px; font-size:13px;">You</h3>
-        <div id="bal-0" class="balance">$10.00</div>
+        <div id="bal-0" class="balance">$100.00</div>
         <div id="hand-0" class="hand-fan-container"></div>
       </div>
     </div>
   </div>
 
   <script>
-    const socket = io({ transports: ['websocket'] });
+    const socket = io({ 
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 3000
+    });
 
     let currentGameState = null;
     let selectedTier = 10;
     let isSoloMode = true;
     let mySeat = 0;
     let roomAction = 'create';
-    let myPersistentBalance = 10.00;
+    let myPersistentBalance = 100.00;
     let isHost = false;
     let isActionPending = false;
     let lastActiveTime = Date.now();
@@ -523,39 +529,36 @@
     let newlyDrawnCardId = null;
     let newlyDrawnTimer = null;
 
-    // Touch / Activity Listener: Keeps active time fresh during live gameplay
     function registerUserActivity() {
       lastActiveTime = Date.now();
+      if (!socket.connected) {
+        socket.connect();
+      }
     }
 
     ['click', 'touchstart', 'keydown'].forEach(evtName => {
       window.addEventListener(evtName, registerUserActivity, { passive: true });
     });
 
-    // Smart Reconnection and AFK Check Handler
-    function handleAppVisibilityOrResume() {
-      let inactiveDuration = Date.now() - lastActiveTime;
-      let isGameRoundActive = currentGameState && !currentGameState.gameEnded;
+    socket.on('connect', () => {
+      if (currentGameState && currentGameState.roomCode) {
+        socket.emit('syncPing');
+      }
+    });
 
-      // Only refresh if AFK > 10 mins AND round is NOT currently active
-      if (inactiveDuration > 600000 && !isGameRoundActive) {
-        window.location.reload();
-      } 
-      // Re-establish WebSocket connection seamlessly if briefly disconnected
-      else if (currentGameState && currentGameState.roomCode) {
+    function handleAppVisibilityOrResume() {
+      registerUserActivity();
+      if (currentGameState && currentGameState.roomCode) {
         if (!socket.connected) {
           socket.connect();
         }
-        socket.emit('setRoomTier', selectedTier);
+        socket.emit('syncPing');
       }
-      lastActiveTime = Date.now();
     }
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         handleAppVisibilityOrResume();
-      } else {
-        lastActiveTime = Date.now();
       }
     });
 
@@ -567,14 +570,15 @@
       handleAppVisibilityOrResume();
     });
 
-    // Safe background check (Only reloads if player is idle in lobby/modal, never mid-round)
     setInterval(() => {
       let inactiveDuration = Date.now() - lastActiveTime;
       let isGameRoundActive = currentGameState && !currentGameState.gameEnded;
       if (inactiveDuration > 600000 && !isGameRoundActive) {
         window.location.reload();
+      } else if (currentGameState && currentGameState.roomCode) {
+        socket.emit('syncPing');
       }
-    }, 30000);
+    }, 10000);
 
     window.addEventListener('DOMContentLoaded', () => {
       let savedName = localStorage.getItem('kua_merah_name');
@@ -591,7 +595,8 @@
       }
 
       if (savedBal) {
-        myPersistentBalance = parseFloat(savedBal);
+        let parsedBal = parseFloat(savedBal);
+        myPersistentBalance = parsedBal <= 0 ? 100.00 : parsedBal;
         document.getElementById('welcomeBalanceText').innerText = `$${myPersistentBalance.toFixed(2)}`;
       }
     });
@@ -1092,9 +1097,10 @@
     }
 
     function quitGame() {
+      // Balance resets to $100.00 if <= $0.00 upon quitting
       if (myPersistentBalance <= 0) {
-        myPersistentBalance = 10.00;
-        localStorage.setItem('kua_merah_balance', 10.00);
+        myPersistentBalance = 100.00;
+        localStorage.setItem('kua_merah_balance', 100.00);
       }
 
       socket.emit('leaveRoom');
@@ -1228,7 +1234,6 @@
     socket.on('stateUpdate', (state) => {
       currentGameState = state;
       isActionPending = false;
-      registerUserActivity();
 
       document.getElementById('status').innerText = state.status;
       document.getElementById('actionLog').innerText = state.actionLog;
@@ -1267,7 +1272,7 @@
       }
 
       if (state.balances && state.balances[mySeat] !== undefined) {
-        myPersistentBalance = state.balances[mySeat];
+        myPersistentBalance = state.balances[mySeat] <= 0 ? 100.00 : state.balances[mySeat];
         localStorage.setItem('kua_merah_balance', myPersistentBalance);
         document.getElementById('welcomeBalanceText').innerText = `$${myPersistentBalance.toFixed(2)}`;
       }
