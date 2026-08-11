@@ -41,8 +41,8 @@
     .casino-table { background: radial-gradient(circle, #124d26 0%, #082913 100%); border: 5px solid #3e2723; border-radius: 16px; padding: 6px; max-width: 900px; width: 100%; flex: 1; margin: 0 auto; box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 5px 20px rgba(0,0,0,0.7); display: flex; flex-direction: column; justify-content: space-between; }
     .table-layout { display: grid; grid-template-rows: auto auto auto; gap: 6px; position: relative; width: 100%; flex: 1; }
     
-    .bot-hand { background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); width: 100%; transition: all 0.3s ease; }
-    #player-box-0 { background: rgba(255,255,255,0.08); padding: 6px 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); transition: all 0.3s ease; }
+    .bot-hand { background: rgba(0,0,0,0.3); padding: 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); width: 100%; transition: all 0.3s ease; position: relative; }
+    #player-box-0 { background: rgba(255,255,255,0.08); padding: 6px 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); transition: all 0.3s ease; position: relative; }
 
     .bot-hand.active-turn, #player-box-0.active-turn {
       border: 2px solid #fbc02d !important;
@@ -204,9 +204,83 @@
     .stop-btn { background: #ff9800; color: #111; font-weight: bold; }
     .quit-btn { background: #e53935; color: white; }
     .ledger-btn { background: #0288d1; color: white; }
+    .chat-btn { background: #9c27b0; color: white; position: relative; }
+
+    /* Speech Pop-up Bubble over Player Avatars */
+    .reaction-bubble {
+      position: absolute;
+      top: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #fbc02d;
+      color: #111;
+      font-weight: 900;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      white-space: nowrap;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.8);
+      z-index: 3000;
+      animation: popUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .reaction-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 5px 5px 0;
+      border-style: solid;
+      border-color: #fbc02d transparent;
+    }
+    @keyframes popUp { 0% { transform: translateX(-50%) scale(0.5); opacity: 0; } 100% { transform: translateX(-50%) scale(1); opacity: 1; } }
+
+    /* Quick Reaction Panel */
+    .reaction-panel {
+      position: fixed;
+      bottom: 60px;
+      right: 10px;
+      background: rgba(10, 35, 18, 0.95);
+      border: 2px solid #fbc02d;
+      border-radius: 12px;
+      padding: 8px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 2500;
+      box-shadow: 0 0 20px rgba(0,0,0,0.9);
+      max-width: 220px;
+    }
+    .reaction-panel .grid-btn {
+      display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
+    }
+    .reaction-panel button {
+      padding: 4px 8px; font-size: 11px; background: rgba(255,255,255,0.15); color: white; border: 1px solid #fbc02d; border-radius: 6px;
+    }
+
+    /* Drawer Chat Overlay */
+    .chat-drawer {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(5, 22, 10, 0.92);
+      border-radius: 10px;
+      display: none;
+      flex-direction: column;
+      padding: 6px;
+      z-index: 1200;
+    }
+    .chat-messages {
+      flex: 1; overflow-y: auto; text-align: left; font-size: 11px; padding: 4px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .chat-msg { background: rgba(255,255,255,0.08); padding: 4px 6px; border-radius: 6px; word-break: break-word; }
+    .chat-input-wrap { display: flex; gap: 4px; margin-top: 4px; }
+    .chat-input-wrap input { flex: 1; background: #072210; border: 1px solid #fbc02d; border-radius: 6px; color: white; padding: 6px; font-size: 12px; }
+
+    .unread-badge {
+      position: absolute; top: -4px; right: -4px; background: #e53935; color: white; border-radius: 50%; font-size: 9px; width: 15px; height: 15px; line-height: 15px; text-align: center; font-weight: bold; display: none;
+    }
 
     .breakdown-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 12px; }
-    
     .ledger-round-box { background: rgba(0,0,0,0.3); border: 1px solid rgba(251,192,45,0.3); border-radius: 8px; padding: 8px; margin-bottom: 8px; text-align: left; }
     .ledger-round-box h4 { color: #fbc02d; margin: 0 0 4px 0; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 3px; }
     .ledger-round-box ul { margin: 0; padding-left: 16px; font-size: 11px; color: #e0e0e0; }
@@ -430,11 +504,34 @@
     </div>
   </div>
 
+  <!-- Quick Reaction Emoji / Banter Panel -->
+  <div id="reactionPanel" class="reaction-panel">
+    <div style="font-size:11px; font-weight:bold; color:#fbc02d; text-align:center; margin-bottom:2px;">Quick Reaction</div>
+    <div class="grid-btn">
+      <button onclick="sendReaction('Steal lah! ⚡')">Steal lah!</button>
+      <button onclick="sendReaction('Nice card! 👍')">Nice card!</button>
+      <button onclick="sendReaction('Unlucky! 😭')">Unlucky!</button>
+      <button onclick="sendReaction('Huat ah! 🧧')">Huat ah!</button>
+      <button onclick="sendReaction('Too slow! 🐢')">Too slow!</button>
+    </div>
+    <div class="grid-btn" style="margin-top:2px;">
+      <button onclick="sendReaction('🤣')">🤣</button>
+      <button onclick="sendReaction('😱')">😱</button>
+      <button onclick="sendReaction('💣')">💣</button>
+      <button onclick="sendReaction('🏆')">🏆</button>
+      <button onclick="sendReaction('🔥')">🔥</button>
+    </div>
+  </div>
+
   <h1 style="margin: 1px 0; font-size:20px;">Kua Merah</h1>
   <div class="controls-bar">
     <button id="startMatchBtn" onclick="startGame()">Start Game</button>
     <button id="claimWinBtn" class="claim-win-btn" onclick="openDeclareModal()" style="display:none;">🏆 DECLARE WIN (4 PAIRS)</button>
     <button id="ledgerBtn" onclick="requestLedger()" class="ledger-btn">📜 Transaction Ledger</button>
+    <button id="reactionToggleBtn" onclick="toggleReactionPanel()" class="chat-btn" style="display:none;">💬 Banter</button>
+    <button id="chatToggleBtn" onclick="toggleChatDrawer()" class="chat-btn" style="display:none;">
+      ✉️ Chat <span id="unreadBadge" class="unread-badge">0</span>
+    </button>
     <button id="sessionControlBtn" onclick="handleSessionControl()" class="stop-btn">🛑 Stop Game</button>
   </div>
 
@@ -466,6 +563,19 @@
         <!-- Center Table -->
         <div class="center-table">
           <div id="watermarkLabel" class="table-watermark">♠ KUA MERAH ♥</div>
+
+          <!-- Drawer Chat Overlay -->
+          <div id="chatDrawer" class="chat-drawer">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:2px;">
+              <span style="font-size:11px; font-weight:bold; color:#fbc02d;">💬 Room Chat</span>
+              <button onclick="toggleChatDrawer()" style="padding:2px 6px; font-size:10px;">✕</button>
+            </div>
+            <div id="chatMessages" class="chat-messages"></div>
+            <div class="chat-input-wrap">
+              <input type="text" id="chatInput" placeholder="Type a message..." maxlength="80" onkeydown="if(event.key==='Enter') submitChatMessage()">
+              <button onclick="submitChatMessage()" style="padding:4px 8px;">Send</button>
+            </div>
+          </div>
           
           <div class="center-content-wrap">
             <div id="deck-area" class="center-col" onclick="inspectCards('deck')">
@@ -524,7 +634,9 @@
     let selectedCardIndex = -1;
     let isSessionStopped = false;
 
-    // Track newly drawn card for yellow glow indicator (0.2s)
+    let unreadCount = 0;
+    let isChatOpen = false;
+
     let lastHandCards = [];
     let newlyDrawnCardId = null;
     let newlyDrawnTimer = null;
@@ -610,6 +722,71 @@
     function updateBotDifficulty(val) {
       socket.emit('setBotDifficulty', val);
     }
+
+    // Reaction & Chat Functions
+    function toggleReactionPanel() {
+      let panel = document.getElementById('reactionPanel');
+      panel.style.display = (panel.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function sendReaction(msg) {
+      toggleReactionPanel();
+      socket.emit('sendReaction', msg);
+    }
+
+    socket.on('receiveReaction', (data) => {
+      let domIdx = mapSeatToDomIndex(data.seat);
+      let pBox = document.getElementById(`player-box-${domIdx}`);
+
+      if (pBox) {
+        let bubble = document.createElement('div');
+        bubble.className = 'reaction-bubble';
+        bubble.innerText = data.text;
+        pBox.appendChild(bubble);
+
+        playCardSound('flip');
+
+        setTimeout(() => {
+          bubble.remove();
+        }, 2000);
+      }
+    });
+
+    function toggleChatDrawer() {
+      let drawer = document.getElementById('chatDrawer');
+      isChatOpen = (drawer.style.display === 'flex');
+      drawer.style.display = isChatOpen ? 'none' : 'flex';
+      isChatOpen = !isChatOpen;
+
+      if (isChatOpen) {
+        unreadCount = 0;
+        let badge = document.getElementById('unreadBadge');
+        badge.innerText = '0';
+        badge.style.display = 'none';
+      }
+    }
+
+    function submitChatMessage() {
+      let input = document.getElementById('chatInput');
+      let msg = input.value;
+      if (msg.trim() !== '') {
+        socket.emit('sendChatMessage', msg);
+        input.value = '';
+      }
+    }
+
+    socket.on('receiveChatMessage', (data) => {
+      let msgBox = document.getElementById('chatMessages');
+      msgBox.innerHTML += `<div class="chat-msg"><b>${data.senderName}:</b> ${data.text}</div>`;
+      msgBox.scrollTop = msgBox.scrollHeight;
+
+      if (!isChatOpen) {
+        unreadCount++;
+        let badge = document.getElementById('unreadBadge');
+        badge.innerText = unreadCount;
+        badge.style.display = 'inline-block';
+      }
+    });
 
     socket.on('roomListUpdate', (roomList) => {
       let selectEl = document.getElementById('activeRoomSelect');
@@ -1062,6 +1239,10 @@
       btn.innerText = "🛑 Stop Game";
       btn.className = "stop-btn";
 
+      // Show Chat Buttons in Multiplayer Mode
+      document.getElementById('reactionToggleBtn').style.display = isSoloMode ? 'none' : 'inline-block';
+      document.getElementById('chatToggleBtn').style.display = isSoloMode ? 'none' : 'inline-block';
+
       socket.emit('joinRoom', { name: customName, roomCode: roomCode, isSolo: isSoloMode, currentBalance: myPersistentBalance });
       socket.emit('setRoomTier', selectedTier);
       socket.emit('setBotDifficulty', diffVal);
@@ -1097,7 +1278,6 @@
     }
 
     function quitGame() {
-      // Balance resets to $100.00 if <= $0.00 upon quitting
       if (myPersistentBalance <= 0) {
         myPersistentBalance = 100.00;
         localStorage.setItem('kua_merah_balance', 100.00);
@@ -1234,6 +1414,7 @@
     socket.on('stateUpdate', (state) => {
       currentGameState = state;
       isActionPending = false;
+      registerUserActivity();
 
       document.getElementById('status').innerText = state.status;
       document.getElementById('actionLog').innerText = state.actionLog;

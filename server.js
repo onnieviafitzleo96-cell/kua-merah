@@ -692,13 +692,31 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Chat & Reaction Broadcasting
+  socket.on('sendReaction', (msg) => {
+    if (!currentRoom) return;
+    io.to(currentRoom.roomCode).emit('receiveReaction', {
+      seat: playerObj.seat,
+      senderName: playerObj.name,
+      text: msg
+    });
+  });
+
+  socket.on('sendChatMessage', (msg) => {
+    if (!currentRoom || !msg || msg.trim() === '') return;
+    let cleanMsg = msg.trim().substring(0, 80);
+    io.to(currentRoom.roomCode).emit('receiveChatMessage', {
+      senderName: playerObj.name,
+      text: cleanMsg
+    });
+  });
+
   socket.on('joinRoom', ({ name, roomCode, isSolo, currentBalance }) => {
     let finalCode = isSolo ? `SOLO_${socket.id.substring(0, 5)}` : (roomCode ? roomCode.trim().toUpperCase() : 'KUA88');
     
     currentRoom = getOrCreateRoom(finalCode, isSolo);
     playerObj.name = name ? name.trim() : 'Player 1';
     
-    // Balance reset to $100.00 if below $0
     let balVal = (currentBalance !== undefined && parseFloat(currentBalance) > 0) ? parseFloat(currentBalance) : 100.00;
     playerObj.balance = balVal;
 
