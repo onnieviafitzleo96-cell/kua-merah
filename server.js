@@ -16,7 +16,6 @@ const LEADERBOARD_FILE = path.join(__dirname, 'leaderboard.json');
 let rooms = {};
 let globalLeaderboard = {};
 
-// Load leaderboard from disk
 function loadLeaderboard() {
   try {
     if (fs.existsSync(LEADERBOARD_FILE)) {
@@ -28,7 +27,6 @@ function loadLeaderboard() {
   }
 }
 
-// Save leaderboard to disk
 function saveLeaderboard() {
   try {
     fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(globalLeaderboard, null, 2));
@@ -37,7 +35,6 @@ function saveLeaderboard() {
   }
 }
 
-// Update or insert player score into leaderboard
 function updatePlayerScore(name, balance) {
   if (!name || name === 'Guest' || name === 'Player 1') return;
   const cleanName = name.trim();
@@ -54,7 +51,6 @@ function updatePlayerScore(name, balance) {
   }
 }
 
-// Get sorted top 20 players
 function getTopLeaderboard() {
   return Object.values(globalLeaderboard)
     .sort((a, b) => b.balance - a.balance)
@@ -909,7 +905,7 @@ io.on('connection', (socket) => {
         
         let effectiveDiff = currentRoom.isSolo ? currentRoom.botDifficulty : 'normal';
         let stepDelay = effectiveDiff === 'hard' ? 400 : 700;
-        setTimeout(() => broadcastRoomState(room), stepDelay);
+        setTimeout(() => broadcastRoomState(currentRoom), stepDelay);
         declareWin(currentRoom, stealData.playerIdx, false);
       }
     } else {
