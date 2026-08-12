@@ -5,11 +5,63 @@ const io = require('socket.io')(http, {
   pingTimeout: 30000,
   pingInterval: 10000
 });
+const fs = require('fs');
+const path = require('path');
 
 app.use(express.static(__dirname));
 
 const BOT_NAMES = ['Oliver', 'Emma', 'Liam', 'Charlotte', 'Jack', 'Sophia', 'Henry', 'Amelia', 'James', 'Mia'];
+const LEADERBOARD_FILE = path.join(__dirname, 'leaderboard.json');
+
 let rooms = {};
+let globalLeaderboard = {};
+
+// Load leaderboard from disk
+function loadLeaderboard() {
+  try {
+    if (fs.existsSync(LEADERBOARD_FILE)) {
+      const data = fs.readFileSync(LEADERBOARD_FILE, 'utf8');
+      globalLeaderboard = JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('Error loading leaderboard:', err);
+  }
+}
+
+// Save leaderboard to disk
+function saveLeaderboard() {
+  try {
+    fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(globalLeaderboard, null, 2));
+  } catch (err) {
+    console.error('Error saving leaderboard:', err);
+  }
+}
+
+// Update or insert player score into leaderboard
+function updatePlayerScore(name, balance) {
+  if (!name || name === 'Guest' || name === 'Player 1') return;
+  const cleanName = name.trim();
+  if (cleanName === '') return;
+
+  const currentBest = globalLeaderboard[cleanName] ? globalLeaderboard[cleanName].balance : -Infinity;
+  if (balance > currentBest) {
+    globalLeaderboard[cleanName] = {
+      name: cleanName,
+      balance: balance,
+      updatedAt: new Date().toISOString()
+    };
+    saveLeaderboard();
+  }
+}
+
+// Get sorted top 20 players
+function getTopLeaderboard() {
+  return Object.values(globalLeaderboard)
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, 20);
+}
+
+loadLeaderboard();
 
 function getActivePlayerCount() {
   return io.of('/').sockets.size;
@@ -139,6 +191,7 @@ function getCleanRoomState(room) {
   return {
     roomCode: room.roomCode,
     isSolo: room.isSolo,
+    hostId: room.hostId,
     deck: room.deck,
     hands: room.hands,
     discardPile: room.discardPile,
@@ -191,6 +244,7 @@ function updateRoomRoster(room) {
       names[p.seat] = p.name;
       isHumanFlags[p.seat] = true;
       room.balances[p.seat] = p.balance;
+      updatePlayerScore(p.name, p.balance);
     }
   });
 
@@ -619,7 +673,10 @@ function declareWin(room, playerIdx, isInstantWin) {
     }
 
     let pObj = room.players.find(p => p.seat === i);
-    if (pObj) pObj.balance = room.balances[i];
+    if (pObj) {
+      pObj.balance = room.balances[i];
+      updatePlayerScore(pObj.name, pObj.balance);
+    }
   }
 
   room.roundHistory.push({
@@ -686,13 +743,16 @@ io.on('connection', (socket) => {
   socket.emit('getRoomList');
   broadcastRoomList();
 
+  socket.on('getLeaderboard', () => {
+    socket.emit('leaderboardData', getTopLeaderboard());
+  });
+
   socket.on('syncPing', () => {
     if (currentRoom) {
       broadcastRoomState(currentRoom);
     }
   });
 
-  // Chat & Reaction Broadcasting
   socket.on('sendReaction', (msg) => {
     if (!currentRoom) return;
     io.to(currentRoom.roomCode).emit('receiveReaction', {
@@ -778,11 +838,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('stopGame', () => {
-    if (!currentRoom) return;
+    if (!currentRoom || socket.id !== currentRoom.hostId) return;
     currentRoom.sessionStopped = true;
     currentRoom.gameEnded = true;
     currentRoom.status = "🛑 Session Ended. Final Ledger Settled.";
-    currentRoom.actionLog = "Game Session Stopped by player. Refer to Ledger for Payments.";
+    currentRoom.actionLog = "Game Session Stopped by Host. Refer to Ledger for Payments.";
 
     let data = calculateSettlements(currentRoom);
     io.to(currentRoom.roomCode).emit('gameSessionStopped', data);
@@ -792,15 +852,24 @@ io.on('connection', (socket) => {
   socket.on('leaveRoom', () => {
     if (currentRoom) {
       console.log(`🚪 [LEFT ROOM] ${playerObj.name} left Room: ${currentRoom.roomCode}`);
+      
+      let leavingSeat = playerObj.seat;
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
+      
       if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
         currentRoom.hostId = currentRoom.players[0].id;
+        io.to(currentRoom.players[0].id).emit('hostPromoted');
       }
 
       if (currentRoom.players.length === 0) {
         delete rooms[currentRoom.roomCode];
       } else {
+        currentRoom.actionLog = `🚪 ${playerObj.name} left the room. Replaced by Bot.`;
         updateRoomRoster(currentRoom);
+        
+        if (!currentRoom.gameEnded && currentRoom.turn === leavingSeat) {
+          processTurn(currentRoom);
+        }
       }
 
       broadcastRoomList();
@@ -840,7 +909,7 @@ io.on('connection', (socket) => {
         
         let effectiveDiff = currentRoom.isSolo ? currentRoom.botDifficulty : 'normal';
         let stepDelay = effectiveDiff === 'hard' ? 400 : 700;
-        setTimeout(() => broadcastRoomState(currentRoom), stepDelay);
+        setTimeout(() => broadcastRoomState(room), stepDelay);
         declareWin(currentRoom, stealData.playerIdx, false);
       }
     } else {
@@ -938,15 +1007,21 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`🔴 [DISCONNECTED] Socket: ${socket.id}`);
     if (currentRoom) {
+      let leavingSeat = playerObj.seat;
       currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
+      
       if (currentRoom.hostId === socket.id && currentRoom.players.length > 0) {
         currentRoom.hostId = currentRoom.players[0].id;
+        io.to(currentRoom.players[0].id).emit('hostPromoted');
       }
-      
+
       if (currentRoom.players.length === 0) {
         delete rooms[currentRoom.roomCode];
       } else {
         updateRoomRoster(currentRoom);
+        if (!currentRoom.gameEnded && currentRoom.turn === leavingSeat) {
+          processTurn(currentRoom);
+        }
       }
 
       broadcastRoomList();

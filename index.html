@@ -32,10 +32,6 @@
     .rules-btn { width: 100%; padding: 8px; background: rgba(251, 192, 45, 0.2); border: 1.5px dashed #fbc02d; color: #fbc02d; font-weight: bold; border-radius: 8px; margin-bottom: 12px; cursor: pointer; font-size: 13px; }
     .rules-btn:hover { background: rgba(251, 192, 45, 0.35); }
 
-    .rules-content { font-size: 13px; line-height: 1.5; color: #e0e0e0; }
-    .rules-content ul { padding-left: 18px; margin: 6px 0; }
-    .rules-content li { margin-bottom: 6px; }
-
     .controls-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin: 2px 0; }
 
     .casino-table { background: radial-gradient(circle, #124d26 0%, #082913 100%); border: 5px solid #3e2723; border-radius: 16px; padding: 6px; max-width: 900px; width: 100%; flex: 1; margin: 0 auto; box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 5px 20px rgba(0,0,0,0.7); display: flex; flex-direction: column; justify-content: space-between; }
@@ -204,9 +200,9 @@
     .stop-btn { background: #ff9800; color: #111; font-weight: bold; }
     .quit-btn { background: #e53935; color: white; }
     .ledger-btn { background: #0288d1; color: white; }
+    .leaderboard-btn { background: #4caf50; color: white; }
     .chat-btn { background: #9c27b0; color: white; position: relative; }
 
-    /* Speech Pop-up Bubble over Player Avatars */
     .reaction-bubble {
       position: absolute;
       top: -24px;
@@ -235,7 +231,6 @@
     }
     @keyframes popUp { 0% { transform: translateX(-50%) scale(0.5); opacity: 0; } 100% { transform: translateX(-50%) scale(1); opacity: 1; } }
 
-    /* Quick Reaction Panel */
     .reaction-panel {
       position: fixed;
       bottom: 60px;
@@ -258,7 +253,6 @@
       padding: 4px 8px; font-size: 11px; background: rgba(255,255,255,0.15); color: white; border: 1px solid #fbc02d; border-radius: 6px;
     }
 
-    /* Drawer Chat Overlay */
     .chat-drawer {
       position: absolute;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -290,6 +284,11 @@
     .ledger-player-box h4 { margin: 0 0 4px 0; font-size: 12px; display: flex; justify-content: space-between; }
     .ledger-player-box ul { margin: 0; padding-left: 16px; font-size: 11px; color: #ccc; }
     .ledger-player-box li { margin-bottom: 2px; }
+
+    .leaderboard-row { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 13px; font-weight: bold; }
+    .leaderboard-row.top1 { color: #fbc02d; background: rgba(251,192,45,0.1); border-radius: 6px; }
+    .leaderboard-row.top2 { color: #e0e0e0; }
+    .leaderboard-row.top3 { color: #cd7f32; }
   </style>
 </head>
 <body>
@@ -316,7 +315,10 @@
         <span id="welcomeBalanceText" style="font-size:16px; font-weight:bold; color:#fbc02d;">$100.00</span>
       </div>
       
-      <button class="rules-btn" onclick="openRulesModal()">📖 How to Play & Rules</button>
+      <div style="display:flex; gap:6px; margin-bottom:12px;">
+        <button class="rules-btn" style="margin-bottom:0; flex:1;" onclick="openRulesModal()">📖 Rules</button>
+        <button class="rules-btn" style="margin-bottom:0; flex:1; background:rgba(76,175,80,0.25); border-color:#4caf50; color:#81c784;" onclick="openLeaderboardModal()">🏆 Leaderboard</button>
+      </div>
 
       <div class="mode-toggle">
         <button id="soloModeBtn" class="mode-btn active" onclick="setPlayMode(true)">Play Solo vs Bots</button>
@@ -376,6 +378,18 @@
       </select>
 
       <button onclick="enterGame()" style="width: 100%; padding: 10px; font-size: 15px;">Enter Casino Room</button>
+    </div>
+  </div>
+
+  <!-- Global Leaderboard Modal -->
+  <div id="leaderboardModal" class="modal-overlay" style="display:none; z-index:1250;">
+    <div class="modal-box" style="border-color:#4caf50;">
+      <h2 style="color:#4caf50; margin-bottom:4px;">🏆 Top Player Leaderboard</h2>
+      <p style="text-align:center; font-size:11px; color:#aaa; margin-bottom:12px;">Rankings based on highest wallet balances</p>
+
+      <div id="leaderboardList" style="margin-bottom:12px; max-height:240px; overflow-y:auto;"></div>
+
+      <button onclick="closeLeaderboardModal()" style="width:100%; padding:10px; background:#4caf50; color:white; font-weight:bold; border-radius:6px; border:none; cursor:pointer;">Close Rankings</button>
     </div>
   </div>
 
@@ -658,6 +672,11 @@
       }
     });
 
+    socket.on('hostPromoted', () => {
+      isHost = true;
+      updateControlButtons();
+    });
+
     function handleAppVisibilityOrResume() {
       registerUserActivity();
       if (currentGameState && currentGameState.roomCode) {
@@ -723,7 +742,38 @@
       socket.emit('setBotDifficulty', val);
     }
 
-    // Reaction & Chat Functions
+    function openLeaderboardModal() {
+      socket.emit('getLeaderboard');
+      document.getElementById('leaderboardModal').style.display = 'flex';
+    }
+
+    function closeLeaderboardModal() {
+      document.getElementById('leaderboardModal').style.display = 'none';
+    }
+
+    socket.on('leaderboardData', (topPlayers) => {
+      let listEl = document.getElementById('leaderboardList');
+      listEl.innerHTML = '';
+
+      if (!topPlayers || topPlayers.length === 0) {
+        listEl.innerHTML = '<p style="text-align:center; color:#aaa; font-size:12px;">No rankings available yet.</p>';
+        return;
+      }
+
+      topPlayers.forEach((p, idx) => {
+        let rankMedals = ['🥇', '🥈', '🥉'];
+        let medal = rankMedals[idx] || `#${idx + 1}`;
+        let rowClass = idx === 0 ? 'top1' : (idx === 1 ? 'top2' : (idx === 2 ? 'top3' : ''));
+
+        listEl.innerHTML += `
+          <div class="leaderboard-row ${rowClass}">
+            <span>${medal} ${p.name}</span>
+            <span>$${p.balance.toFixed(2)}</span>
+          </div>
+        `;
+      });
+    });
+
     function toggleReactionPanel() {
       let panel = document.getElementById('reactionPanel');
       panel.style.display = (panel.style.display === 'flex') ? 'none' : 'flex';
@@ -949,9 +999,27 @@
       socket.emit('getLedgerHistory');
     }
 
+    function updateControlButtons() {
+      let btn = document.getElementById('sessionControlBtn');
+      if (isSessionStopped) {
+        btn.innerText = "🚪 Quit Game";
+        btn.className = "quit-btn";
+      } else if (isSoloMode || isHost) {
+        btn.innerText = "🛑 Stop Game";
+        btn.className = "stop-btn";
+      } else {
+        btn.innerText = "🚪 Quit Room";
+        btn.className = "quit-btn";
+      }
+    }
+
     function handleSessionControl() {
-      if (!isSessionStopped) {
-        socket.emit('stopGame');
+      if (isSoloMode || isHost) {
+        if (!isSessionStopped) {
+          socket.emit('stopGame');
+        } else {
+          quitGame();
+        }
       } else {
         quitGame();
       }
@@ -1025,10 +1093,7 @@
 
     socket.on('gameSessionStopped', (data) => {
       isSessionStopped = true;
-      let btn = document.getElementById('sessionControlBtn');
-      btn.innerText = "🚪 Quit Game";
-      btn.className = "quit-btn";
-
+      updateControlButtons();
       renderLedgerUI(data);
     });
 
@@ -1235,11 +1300,7 @@
       let diffVal = isSoloMode ? document.getElementById('botDifficultySelect').value : 'normal';
 
       isSessionStopped = false;
-      let btn = document.getElementById('sessionControlBtn');
-      btn.innerText = "🛑 Stop Game";
-      btn.className = "stop-btn";
 
-      // Show Chat Buttons in Multiplayer Mode
       document.getElementById('reactionToggleBtn').style.display = isSoloMode ? 'none' : 'inline-block';
       document.getElementById('chatToggleBtn').style.display = isSoloMode ? 'none' : 'inline-block';
 
@@ -1253,6 +1314,7 @@
     socket.on('joinedRoomSuccess', (data) => {
       mySeat = data.seat;
       isHost = data.isHost;
+      updateControlButtons();
     });
 
     socket.on('privateRuleAlert', (msg) => {
@@ -1416,6 +1478,9 @@
       isActionPending = false;
       registerUserActivity();
 
+      isHost = (socket.id === state.hostId);
+      updateControlButtons();
+
       document.getElementById('status').innerText = state.status;
       document.getElementById('actionLog').innerText = state.actionLog;
       document.getElementById('deck-count').innerText = state.deck.length;
@@ -1480,7 +1545,7 @@
           discardArea.classList.add('inspectable');
           selectedCardIndex = -1;
           
-          if (isSoloMode || mySeat === 0) {
+          if (isSoloMode || isHost) {
             startMatchBtn.style.display = 'inline-block';
             startMatchBtn.disabled = false;
             startMatchBtn.style.opacity = '1';
